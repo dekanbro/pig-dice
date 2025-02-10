@@ -2,6 +2,7 @@
 
 import { usePrivy } from '@privy-io/react-auth'
 import { LoginButton } from '@/components/login-button'
+import { ThemeToggle } from '@/components/theme-toggle'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { setCookie } from 'cookies-next'
@@ -55,6 +56,7 @@ export function Header() {
             
             {/* Auth/Wallet Section */}
             <div className="flex items-center gap-4">
+              <ThemeToggle />
               {authenticated && user?.wallet && (
                 <div className="hidden md:block text-sm text-muted-foreground font-mono">
                   {user.wallet.address.slice(0, 6)}...{user.wallet.address.slice(-4)}
