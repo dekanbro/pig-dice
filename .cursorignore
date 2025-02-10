@@ -1,0 +1,23 @@
+# Cursor-specific settings and rules
+
+# Directories to ignore
+.next/
+node_modules/
+.env
+.env.*
+
+# Files to ignore
+*.log
+.DS_Store
+
+# Auto-commit rules
+[commit]
+# Automatically commit after successful test runs
+commit_after_test = true
+# Automatically commit after significant file changes (>50 lines)
+commit_after_significant_changes = true
+
+# Editor settings
+[editor]
+format_on_save = true
+typescript.suggest.completeFunctionCalls = true 
