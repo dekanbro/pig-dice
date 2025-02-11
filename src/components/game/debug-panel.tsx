@@ -6,6 +6,7 @@ interface DebugPanelProps {
   onTriggerBust: () => void
   setCurrentBank: (value: number) => void
   currentBank: number
+  onTopUpSession?: () => void
 }
 
 export function DebugPanel({
@@ -13,7 +14,8 @@ export function DebugPanel({
   onTriggerMiniBonus,
   onTriggerBust,
   setCurrentBank,
-  currentBank
+  currentBank,
+  onTopUpSession
 }: DebugPanelProps) {
   if (process.env.NEXT_PUBLIC_SHOW_DEBUG_PANEL !== "true") {
     return null
@@ -21,8 +23,19 @@ export function DebugPanel({
 
   return (
     <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
-      <div className="text-xs text-muted-foreground mb-1 text-right">Debug Controls</div>
+      <div className="text-xs text-muted-foreground mb-1 text-right">Debug Controls (testing only)</div>
       <div className="flex flex-col gap-2 p-3 rounded-lg border bg-background/95 shadow-lg">
+        {onTopUpSession && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onTopUpSession}
+            className="text-xs bg-green-500/10 hover:bg-green-500/20 border-green-500/20"
+          >
+            <span className="mr-2">💰</span>
+            Add 1 PIG
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"

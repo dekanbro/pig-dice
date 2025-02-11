@@ -36,6 +36,7 @@ export function GameBoard({
   handleBustDismiss,
   simulateMegaBonus,
   simulateMiniBonusBonus,
+  handleDeposit,
 }: GameBoardProps) {
   const { user } = usePrivy()
 
@@ -67,7 +68,11 @@ export function GameBoard({
     }
 
     await handleStartGame()
+  }
 
+  // Handle debug top up
+  const handleDebugTopUp = () => {
+    handleDeposit(1)
   }
 
   // Handle cashout with toast
@@ -190,6 +195,7 @@ export function GameBoard({
           onTriggerBust={handleBust}
           setCurrentBank={handleBust}
           currentBank={currentBank}
+          onTopUpSession={handleDebugTopUp}
         />
 
         {/* Add Bust Animation */}

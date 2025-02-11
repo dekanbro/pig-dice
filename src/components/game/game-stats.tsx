@@ -1,7 +1,6 @@
 'use client'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 
 interface GameStatsProps {
   sessionStats: {
@@ -14,7 +13,7 @@ interface GameStatsProps {
   onTopUpSession?: () => void
 }
 
-export function GameStats({ sessionStats, sessionBank = 0, onTopUpSession }: GameStatsProps) {
+export function GameStats({ sessionStats, sessionBank = 0 }: GameStatsProps) {
   return (
     <div className="space-y-4">
       <Card>
@@ -50,11 +49,6 @@ export function GameStats({ sessionStats, sessionBank = 0, onTopUpSession }: Gam
             <div className="text-sm text-muted-foreground">Available Balance</div>
             <div className="text-2xl font-bold">{sessionBank.toFixed(3)} PIG</div>
           </div>
-          {process.env.NODE_ENV === 'development' && onTopUpSession && (
-            <Button onClick={onTopUpSession} className="w-full">
-              Add 1 PIG (Debug)
-            </Button>
-          )}
         </CardContent>
       </Card>
     </div>
