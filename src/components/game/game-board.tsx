@@ -10,12 +10,15 @@ import type { UseGameStateReturn } from '@/hooks/use-game-state'
 import { BonusPanel } from './bonus-panel'
 import { BustEffect } from './animations/rain'
 import { DebugPanel } from './debug-panel'
+import { useEffect } from 'react'
+import { toast } from '@/components/ui/use-toast'
+import { getRollDescription, getRollVariant } from '@/hooks/use-game-state'
 
 type GameBoardProps = UseGameStateReturn
 
 export function GameBoard({
   isRolling,
-  lastRoll,
+  currentRoll,
   currentBank,
   sessionBank,
   currentStreak,
@@ -33,9 +36,76 @@ export function GameBoard({
   handleBustDismiss,
   simulateMegaBonus,
   simulateMiniBonusBonus,
-  setCurrentBank,
 }: GameBoardProps) {
   const { user } = usePrivy()
+
+  // Add effect to auto-roll when game starts
+  useEffect(() => {
+    if (gameStarted && !isRolling && previousRolls.length === 0) {
+      handleRoll()
+    }
+  }, [gameStarted, isRolling, previousRolls.length, handleRoll])
+
+  // Handle game start with toast
+  const onStartGame = async () => {
+    if (!user?.id) {
+      toast({
+        title: "Not Connected",
+        description: "Please connect your wallet to play.",
+        variant: "destructive"
+      })
+      return
+    }
+    
+    if (sessionBank < 0.01) {
+      toast({
+        title: "Insufficient Balance",
+        description: "You need at least 0.01 PIG to start a game.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    await handleStartGame()
+
+  }
+
+  // Handle cashout with toast
+  const onCashout = () => {
+    if (currentBank <= 0) {
+      toast({
+        title: "Nothing to Cash Out",
+        description: "Your current bank is empty.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    handleCashout()
+    toast({
+      title: "Cashed Out!",
+      description: `Successfully cashed out ${currentBank.toFixed(3)} PIG!`,
+    })
+  }
+
+  // Handle roll complete with toast for special outcomes
+  const onRollComplete = () => {
+    console.log('GameBoard onRollComplete called', { currentRoll, isRolling })
+    
+    handleRollComplete()
+    
+    const roll = currentRoll[0]
+    console.log('Current roll value:', roll)
+    
+    if (roll) {
+      console.log('Showing toast for roll:', roll)
+      toast({
+        title: "Roll Complete",
+        description: getRollDescription(roll),
+        variant: getRollVariant(roll)
+      })
+    }
+  }
 
   return (
     <Card className="w-full relative">
@@ -59,8 +129,8 @@ export function GameBoard({
         <div className="w-32 h-32 md:w-48 md:h-48">
           <MegaDice
             rolling={isRolling}
-            value={lastRoll}
-            onRollComplete={handleRollComplete}
+            value={currentRoll[0] || null}
+            onRollComplete={onRollComplete}
           />
         </div>
 
@@ -118,7 +188,7 @@ export function GameBoard({
           onTriggerMegaBonus={simulateMegaBonus}
           onTriggerMiniBonus={simulateMiniBonusBonus}
           onTriggerBust={handleBust}
-          setCurrentBank={setCurrentBank}
+          setCurrentBank={handleBust}
           currentBank={currentBank}
         />
 
@@ -141,17 +211,17 @@ export function GameBoard({
         {!gameStarted ? (
           <Button 
             size="lg"
-            onClick={() => handleStartGame()}
+            onClick={onStartGame}
             disabled={isRolling || !user?.id || sessionBank < 0.01}
           >
-            Start Game (0.01 ETH)
+            Start Game (0.01 PIG)
           </Button>
         ) : (
           <>
             <Button 
               size="lg"
               variant="outline"
-              onClick={() => handleCashout()}
+              onClick={onCashout}
               disabled={isRolling || currentBank <= 0}
             >
               Cash Out

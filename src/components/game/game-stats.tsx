@@ -32,7 +32,7 @@ export function GameStats({ sessionStats, sessionBank = 0, onTopUpSession }: Gam
           </div>
           <div>
             <div className="text-sm text-muted-foreground">Highest Win</div>
-            <div className="text-2xl font-bold">{sessionStats.highestWin.toFixed(3)} ETH</div>
+            <div className="text-2xl font-bold">{sessionStats.highestWin.toFixed(3)} PIG</div>
           </div>
           <div>
             <div className="text-sm text-muted-foreground">Win Rate</div>
@@ -48,11 +48,11 @@ export function GameStats({ sessionStats, sessionBank = 0, onTopUpSession }: Gam
         <CardContent className="space-y-4">
           <div>
             <div className="text-sm text-muted-foreground">Available Balance</div>
-            <div className="text-2xl font-bold">{sessionBank.toFixed(3)} ETH</div>
+            <div className="text-2xl font-bold">{sessionBank.toFixed(3)} PIG</div>
           </div>
           {process.env.NODE_ENV === 'development' && onTopUpSession && (
             <Button onClick={onTopUpSession} className="w-full">
-              Add 1 ETH (Debug)
+              Add 1 PIG (Debug)
             </Button>
           )}
         </CardContent>

@@ -1,59 +1,63 @@
 'use client'
 
-import { usePrivy } from '@privy-io/react-auth'
+import { Suspense } from 'react'
 import { GameBoard } from '@/components/game/game-board'
 import { GameStats } from '@/components/game/game-stats'
 import { JackpotDisplay } from '@/components/game/jackpot-display'
+import { AuthCheck } from '@/components/auth/auth-check'
 import { useGameState } from '@/hooks/use-game-state'
-
-// Mock data for jackpot
-const mockJackpot = {
-  amount: '5.5 ETH',
-  recentWinners: [
-    {
-      address: '0x1234...5678',
-      amount: '3.2 ETH',
-      timestamp: '2 hours ago',
-    },
-    {
-      address: '0x8765...4321',
-      amount: '2.8 ETH',
-      timestamp: '5 hours ago',
-    },
-  ]
-}
+import { usePrivy } from '@privy-io/react-auth'
 
 export default function GamePage() {
   const { user } = usePrivy()
   const gameState = useGameState(user?.id)
-  const { sessionBank, sessionStats, handleDeposit } = gameState
+  const { sessionBank, sessionStats, handleDeposit, jackpotAmount, lastJackpotContribution, recentWinners } = gameState
+
+  console.log('GamePage render:', { 
+    jackpotAmount, 
+    lastJackpotContribution,
+    currentStreak: gameState.currentStreak,
+    recentWinners
+  })
 
   const handleTopUpSession = () => {
     handleDeposit(1)
   }
 
   return (
-    <div className="container mx-auto p-4 space-y-4">
+    <AuthCheck>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column - Stats */}
         <div className="lg:col-span-1 order-2 lg:order-1">
-          <GameStats
-            sessionStats={sessionStats}
-            sessionBank={sessionBank}
-            onTopUpSession={handleTopUpSession}
-          />
+          <Suspense fallback={<div className="animate-pulse h-[200px] bg-muted rounded-lg" />}>
+            <GameStats
+              sessionStats={sessionStats}
+              sessionBank={sessionBank}
+              onTopUpSession={handleTopUpSession}
+            />
+          </Suspense>
         </div>
 
         {/* Center Column - Game Board */}
         <div className="lg:col-span-1 order-1 lg:order-2">
-          <GameBoard {...gameState} />
+          <Suspense fallback={<div className="animate-pulse h-[400px] bg-muted rounded-lg" />}>
+            <GameBoard {...gameState} />
+          </Suspense>
         </div>
 
         {/* Right Column - Jackpot */}
         <div className="lg:col-span-1 order-3">
-          <JackpotDisplay jackpot={mockJackpot} />
+          <Suspense fallback={<div className="animate-pulse h-[300px] bg-muted rounded-lg" />}>
+            <JackpotDisplay
+              jackpot={{
+                amount: jackpotAmount.toFixed(3) + ' PIG',
+                lastContribution: lastJackpotContribution,
+                recentWinners
+              }}
+            />
+          </Suspense>
         </div>
       </div>
-    </div>
+    </AuthCheck>
   )
 } 

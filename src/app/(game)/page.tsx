@@ -16,26 +16,17 @@ export const mockStats = {
   winRate: 42.8
 }
 
-export const mockJackpot = {
-  amount: '5.5 ETH',
-  recentWinners: [
-    {
-      address: '0x1234...5678',
-      amount: '3.2 ETH',
-      timestamp: '2 hours ago',
-    },
-    {
-      address: '0x8765...4321',
-      amount: '2.8 ETH',
-      timestamp: '5 hours ago',
-    },
-  ]
-}
-
 export default function GamePage() {
   const { user } = usePrivy()
   const gameState = useGameState(user?.id)
-  const { sessionBank, sessionStats, handleDeposit } = gameState
+  const { sessionBank, sessionStats, handleDeposit, jackpotAmount, lastJackpotContribution, recentWinners } = gameState
+
+  console.log('GamePage render:', { 
+    jackpotAmount, 
+    lastJackpotContribution,
+    currentStreak: gameState.currentStreak,
+    recentWinners
+  })
 
   const handleTopUpSession = () => {
     handleDeposit(1)
@@ -67,19 +58,9 @@ export default function GamePage() {
           <Suspense fallback={<div className="animate-pulse h-[300px] bg-muted rounded-lg" />}>
             <JackpotDisplay
               jackpot={{
-                amount: '5.5 ETH',
-                recentWinners: [
-                  {
-                    address: '0x1234...5678',
-                    amount: '3.2 ETH',
-                    timestamp: '2 hours ago',
-                  },
-                  {
-                    address: '0x8765...4321',
-                    amount: '2.8 ETH',
-                    timestamp: '5 hours ago',
-                  },
-                ]
+                amount: jackpotAmount.toFixed(3) + ' PIG',
+                lastContribution: lastJackpotContribution,
+                recentWinners
               }}
             />
           </Suspense>

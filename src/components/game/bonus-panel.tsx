@@ -78,7 +78,7 @@ export function BonusPanel({ type, rolls, currentBank, onDismiss }: BonusPanelPr
           className={`text-lg font-semibold mb-6
             ${type === 'MEGA_BONUS' ? 'text-yellow-500' : 'text-blue-500'}`}
         >
-          Total Payout: {currentBank.toFixed(3)} ETH
+          Total Payout: {currentBank.toFixed(3)} PIG
         </motion.div>
         <motion.div
           initial={{ opacity: 0 }}

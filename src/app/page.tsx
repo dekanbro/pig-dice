@@ -31,7 +31,7 @@ export default function HomePage() {
       
       <div className="mt-8 grid gap-4 text-center text-sm text-muted-foreground">
         <p>Built with Next.js, Privy, and Base</p>
-        <p>Minimum bet: {process.env.NEXT_PUBLIC_MIN_BET} ETH</p>
+        <p>Minimum bet: {process.env.NEXT_PUBLIC_MIN_BET} PIG</p>
       </div>
     </div>
   )

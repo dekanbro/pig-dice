@@ -1,59 +1,38 @@
-import { useState } from 'react'
-import { getCookie } from 'cookies-next'
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { toast } from '@/components/ui/use-toast'
+import { getCookie } from 'cookies-next'
 
-interface GameState {
-  isRolling: boolean
-  lastRoll: number | null
-  currentBank: number
-  sessionBank: number
-  currentStreak: number
-  previousRolls: number[]
-  gameStarted: boolean
-  bonusType: 'MEGA_BONUS' | 'MINI_BONUS' | null
-  bonusRolls: number[]
-  showBust: boolean
-  sessionStats: {
-    totalGames: number
-    wins: number
-    highestWin: number
-    winRate: number
-  }
+const ROLL_COST = 0.01
+const INITIAL_JACKPOT = 5.5
+
+// Convert number to fixed precision (3 decimals) to avoid floating point issues
+function toFixed3(num: number): number {
+  return Number(num.toFixed(3))
 }
-
-interface RollResult {
-  roll: number
-  payout: number
-  multiplier: number
-  bonusType: 'MEGA_BONUS' | 'MINI_BONUS' | null
-  bonusRolls?: number[]
-  streakBonus: number
-}
-
-const ROLL_COST = 0.01 // Cost per roll in ETH
 
 // Helper function to get roll description
-function getRollDescription(roll: number, multiplier: number, streakBonus: number = 0) {
+export function getRollDescription(roll: number) {
   switch (roll) {
     case 1:
       return 'Bust! You lose everything'
     case 2:
-      return `Small loss (${multiplier}x${streakBonus ? ` +${streakBonus}x streak` : ''})`
+      return `Small loss `
     case 3:
-      return `Break even (${multiplier}x${streakBonus ? ` +${streakBonus}x streak` : ''})`
+      return `Break even - Bonus chance!`
     case 4:
-      return `Small win (${multiplier}x${streakBonus ? ` +${streakBonus}x streak` : ''})`
+      return `Small win `
     case 5:
-      return `Medium win (${multiplier}x${streakBonus ? ` +${streakBonus}x streak` : ''})`
+      return `Medium win `
     case 6:
-      return `Break even (${multiplier}x${streakBonus ? ` +${streakBonus}x streak` : ''}) - Bonus chance!`
+      return `Break even - Bonus chance!`
     default:
       return 'Invalid roll'
   }
 }
 
 // Helper function to get toast variant based on roll outcome
-function getRollVariant(roll: number): 'default' | 'destructive' | 'success' | 'warning' | 'info' {
+export function getRollVariant(roll: number): 'default' | 'destructive' | 'success' | 'warning' | 'info' {
   switch (roll) {
     case 1:
       return 'destructive'
@@ -71,6 +50,152 @@ function getRollVariant(roll: number): 'default' | 'destructive' | 'success' | '
   }
 }
 
+interface GameState {
+  isRolling: boolean
+  currentRoll: number[]
+  currentStreak: number
+  sessionBank: number
+  currentBank: number
+  gameStarted: boolean
+  bonusType: 'MEGA_BONUS' | 'MINI_BONUS' | null
+  bonusRolls: number[]
+  showBust: boolean
+  previousRolls: number[]
+  sessionStats: {
+    totalGames: number
+    wins: number
+    highestWin: number
+    winRate: number
+  }
+  lastBonusCooldown: {
+    mega: number | null
+    mini: number | null
+  }
+  jackpotAmount: number
+  lastJackpotContribution: number | null
+  recentWinners: Array<{
+    address: string
+    amount: string
+    timestamp: string
+  }>
+}
+
+interface GameActions {
+  setRolling: (isRolling: boolean) => void
+  setCurrentRoll: (roll: number[]) => void
+  setCurrentStreak: (streak: number) => void
+  setSessionBank: (amount: number) => void
+  setCurrentBank: (amount: number) => void
+  setGameStarted: (started: boolean) => void
+  setBonusType: (type: GameState['bonusType']) => void
+  setBonusRolls: (rolls: number[]) => void
+  setShowBust: (show: boolean) => void
+  setPreviousRolls: (rolls: number[]) => void
+  setSessionStats: (stats: Partial<GameState['sessionStats']>) => void
+  setLastBonusCooldown: (cooldown: Partial<GameState['lastBonusCooldown']>) => void
+  setJackpotAmount: (amount: number) => void
+  setLastJackpotContribution: (amount: number | null) => void
+  addRecentWinner: (winner: { address: string, amount: string }) => void
+  reset: () => void
+}
+
+const initialState: GameState = {
+  isRolling: false,
+  currentRoll: [],
+  currentStreak: 0,
+  sessionBank: 0,
+  currentBank: 0,
+  gameStarted: false,
+  bonusType: null,
+  bonusRolls: [],
+  showBust: false,
+  previousRolls: [],
+  sessionStats: {
+    totalGames: 0,
+    wins: 0,
+    highestWin: 0,
+    winRate: 0
+  },
+  lastBonusCooldown: {
+    mega: null,
+    mini: null
+  },
+  jackpotAmount: INITIAL_JACKPOT,
+  lastJackpotContribution: null,
+  recentWinners: []
+}
+
+export const useGameStore = create<GameState & GameActions>()(
+  persist(
+    (set, get) => ({
+      ...initialState,
+      setRolling: (isRolling) => set({ isRolling }),
+      setCurrentRoll: (currentRoll) => set({ currentRoll }),
+      setCurrentStreak: (currentStreak) => set({ currentStreak }),
+      setSessionBank: (sessionBank) => set({ sessionBank: toFixed3(sessionBank) }),
+      setCurrentBank: (currentBank) => set({ currentBank: toFixed3(currentBank) }),
+      setGameStarted: (gameStarted) => set({ gameStarted }),
+      setBonusType: (bonusType) => set({ bonusType }),
+      setBonusRolls: (bonusRolls) => set({ bonusRolls }),
+      setShowBust: (showBust) => set({ showBust }),
+      setPreviousRolls: (previousRolls) => set({ previousRolls }),
+      setSessionStats: (stats) => 
+        set((state) => ({
+          sessionStats: { ...state.sessionStats, ...stats }
+        })),
+      setLastBonusCooldown: (cooldown) =>
+        set((state) => ({
+          lastBonusCooldown: { ...state.lastBonusCooldown, ...cooldown }
+        })),
+      setJackpotAmount: (amount) => {
+        const fixedAmount = toFixed3(amount)
+        console.log('Setting jackpot amount:', { 
+          oldAmount: toFixed3(get().jackpotAmount),
+          newAmount: fixedAmount,
+          contribution: toFixed3(fixedAmount - get().jackpotAmount)
+        })
+        set((state) => ({ 
+          jackpotAmount: fixedAmount,
+          lastJackpotContribution: toFixed3(fixedAmount - state.jackpotAmount)
+        }))
+      },
+      setLastJackpotContribution: (amount) => set({ 
+        lastJackpotContribution: amount !== null ? toFixed3(amount) : null 
+      }),
+      addRecentWinner: (winner) => set((state) => ({
+        recentWinners: [
+          {
+            ...winner,
+            timestamp: 'Just now'
+          },
+          ...state.recentWinners.slice(0, 4)
+        ]
+      })),
+      reset: () => set(initialState)
+    }),
+    {
+      name: 'game-storage',
+      partialize: (state) => {
+        const partialState = {
+          jackpotAmount: toFixed3(state.jackpotAmount),
+          sessionStats: state.sessionStats,
+          sessionBank: toFixed3(state.sessionBank),
+          recentWinners: state.recentWinners
+        }
+        console.log('Persisting state:', partialState)
+        return partialState
+      },
+      onRehydrateStorage: () => (state) => {
+        console.log('Rehydrated state:', { 
+          jackpotAmount: state?.jackpotAmount,
+          lastJackpotContribution: state?.lastJackpotContribution,
+          recentWinners: state?.recentWinners
+        })
+      }
+    }
+  )
+)
+
 export type UseGameStateReturn = GameState & {
   handleStartGame: () => Promise<void>
   handleRoll: () => Promise<void>
@@ -83,51 +208,77 @@ export type UseGameStateReturn = GameState & {
   handleWithdraw: (amount: number) => boolean
   simulateMegaBonus: () => void
   simulateMiniBonusBonus: () => void
-  setCurrentBank: (value: number | ((prev: number) => number)) => void
 }
 
 export function useGameState(userId?: string): UseGameStateReturn {
-  const [isRolling, setIsRolling] = useState(false)
-  const [lastRoll, setLastRoll] = useState<number | null>(null)
-  const [currentBank, setCurrentBank] = useState(0)
-  const [sessionBank, setSessionBank] = useState(0)
-  const [currentStreak, setCurrentStreak] = useState(0)
-  const [previousRolls, setPreviousRolls] = useState<number[]>([])
-  const [gameStarted, setGameStarted] = useState(false)
-  const [bonusType, setBonusType] = useState<'MEGA_BONUS' | 'MINI_BONUS' | null>(null)
-  const [bonusRolls, setBonusRolls] = useState<number[]>([])
-  const [showBust, setShowBust] = useState(false)
-  const [rollResult, setRollResult] = useState<RollResult | null>(null)
-  const [sessionStats, setSessionStats] = useState({
-    totalGames: 0,
-    wins: 0,
-    highestWin: 0,
-    winRate: 0
-  })
-
+  const state = useGameStore()
+  
   async function handleStartGame() {
-    if (!userId || sessionBank < ROLL_COST) return
-    setGameStarted(true)
-    // Deduct roll cost from session bank
-    setSessionBank(prev => prev - ROLL_COST)
-    // Set initial bank to roll cost
-    setCurrentBank(ROLL_COST)
-    // Start rolling immediately
-    setIsRolling(true)
-    setBonusType(null)
-    setBonusRolls([])
+    if (!userId || state.sessionBank < ROLL_COST) return
+    
+    // Reset all game state
+    state.setGameStarted(true)
+    state.setSessionBank(state.sessionBank - ROLL_COST)
+    state.setCurrentBank(ROLL_COST)
+    state.setCurrentStreak(0)
+    state.setPreviousRolls([])
+    state.setCurrentRoll([])
+    state.setBonusType(null)
+    state.setBonusRolls([])
+    state.setShowBust(false)
+    state.setRolling(true)  // Start rolling animation
+    
+    state.setSessionStats({
+      totalGames: state.sessionStats.totalGames + 1
+    })
 
-    // Update total games counter when starting a new game
-    setSessionStats(prev => ({
-      ...prev,
-      totalGames: prev.totalGames + 1
-    }))
+    // Automatically trigger first roll
+    await handleRoll()
+  }
+
+  async function handleRoll() {
+    if (!userId) return
+
+    // Don't check isRolling here since we want to allow rolling from handleStartGame
+    // Only check for subsequent rolls
+    if (!state.gameStarted && state.isRolling) return
+
+    // Check if we have enough session bank for the roll
+    if (state.sessionBank < ROLL_COST) {
+      toast({
+        title: "Insufficient Session Bank",
+        description: "You need at least 0.01 PIG in your session bank to roll.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const token = getCookie('privy-token')
+    if (!token) {
+      toast({
+        title: "Authentication Error",
+        description: "Please reconnect your wallet.",
+        variant: "destructive"
+      })
+      return
+    }
 
     try {
-      // Get the token from cookie
-      const token = getCookie('privy-token')
-      if (!token) {
-        throw new Error('No auth token found')
+      state.setRolling(true)
+      state.setSessionBank(state.sessionBank - ROLL_COST)
+
+      // Add roll cost to jackpot after first roll in streak
+      if (state.currentStreak > 0) {
+        console.log('Adding to jackpot:', { 
+          currentAmount: toFixed3(state.jackpotAmount),
+          contribution: ROLL_COST,
+          streak: state.currentStreak
+        })
+        const newJackpotAmount = toFixed3(state.jackpotAmount + ROLL_COST)
+        state.setJackpotAmount(newJackpotAmount)
+      } else {
+        console.log('First roll in streak, no jackpot contribution')
+        state.setLastJackpotContribution(null)
       }
 
       const response = await fetch('/api/game/roll', {
@@ -138,391 +289,182 @@ export function useGameState(userId?: string): UseGameStateReturn {
         },
         body: JSON.stringify({
           betAmount: ROLL_COST,
-          currentBank: 0,
-          currentStreak: 0,
-          previousRolls: [],
+          currentBank: state.currentBank,
+          currentStreak: state.currentStreak,
+          previousRolls: state.previousRolls,
         }),
       })
-      
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Roll failed')
       }
+
+      const { data } = await response.json()
+      const {
+        roll,
+        payout,
+        bonusType: newBonusType,
+        bonusRolls: newBonusRolls,
+        isBust,
+        newStreak,
+      } = data
+
+      // Update game state
+      state.setCurrentRoll([roll])
+      state.setCurrentStreak(newStreak)
       
-      const data = await response.json()
-      if (data.success) {
-        const roll = data.data.roll
-        const streakBonus = 0 // No streak bonus on first roll
-        const multiplier = data.data.multiplier
-        const payout = data.data.payout
-
-        setLastRoll(roll)
-        setCurrentBank(payout)
-        setCurrentStreak(data.data.newStreak)
-        setPreviousRolls([roll])
-        
-        // Update session stats based on roll outcome
-        if (roll === 1) {
-          // Update win rate on bust
-          setSessionStats(prev => ({
-            ...prev,
-            winRate: (prev.wins / prev.totalGames) * 100
-          }))
-        } else if (payout > ROLL_COST) {
-          // Count as a win if payout is higher than roll cost
-          setSessionStats(prev => {
-            const newWins = prev.wins + 1
-            return {
-              ...prev,
-              wins: newWins,
-              winRate: (newWins / prev.totalGames) * 100,
-              highestWin: payout > prev.highestWin ? payout : prev.highestWin
-            }
-          })
-        }
-
-        // Show roll information
-        toast({
-          title: `Rolled a ${roll}!`,
-          description: getRollDescription(roll, multiplier, streakBonus),
-          variant: getRollVariant(roll),
-        })
-        
-        // Handle bonus rounds
-        if (data.data.bonusType) {
-          setBonusType(data.data.bonusType)
-          setBonusRolls(data.data.bonusRolls || [])
-        }
-        
+      // Handle different roll outcomes
+      if (isBust) {
         // Handle bust
-        if (data.data.isBust) {
-          handleBust()
-        }
+        state.setCurrentBank(0)
+        state.setShowBust(true)
+        state.setGameStarted(false)
+        state.setPreviousRolls([])  // Reset dice history on bust
+        state.setCurrentRoll([])    // Also reset current roll
+      } else if (roll === 3 || roll === 6) {
+        // Break even - keep current bank the same
+        // Do nothing to currentBank as it should stay the same
+        state.setPreviousRolls([...state.previousRolls, roll])
       } else {
-        console.error('Roll failed:', data.error)
+        // Handle win/loss cases
+        state.setCurrentBank(Math.max(0, payout))
+        state.setPreviousRolls([...state.previousRolls, roll])
       }
-    } catch (error) {
-      console.error('Error rolling dice:', error)
-      // Reset game state on error
-      setGameStarted(false)
-      setCurrentBank(0)
-      setIsRolling(false)
-      // Return the roll cost to session bank
-      setSessionBank(prev => prev + ROLL_COST)
-    }
-  }
 
-  async function handleRoll() {
-    if (!userId || isRolling || !gameStarted || sessionBank < ROLL_COST) return
-
-    setIsRolling(true)
-    
-    try {
-      // Deduct roll cost from session bank
-      setSessionBank(prev => prev - ROLL_COST)
-      setCurrentBank(prev => prev + ROLL_COST)
-
-      // Check for potential bonus triggers with previous rolls
-      const lastRolls = [...previousRolls].slice(-2)
-      const isMegaBonusPotential = lastRolls.length === 2 && lastRolls.every(r => r === 6)
-      const isMiniBonusPotential = previousRolls.length >= 2 && 
-        previousRolls.slice(-2).every(r => r === 3)
-
-      const response = await fetch('/api/game/roll', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getCookie('privy-token')}`,
-        },
-        body: JSON.stringify({
-          betAmount: ROLL_COST,
-          currentBank: currentBank + ROLL_COST,
-          currentStreak: currentStreak,
-          previousRolls: previousRolls,
-          isMegaBonusPotential,
-          isMiniBonusPotential
-        }),
-      })
-
-      const data = await response.json()
-      
-      if (data.success) {
-        const { roll, payout, multiplier, bonusType } = data.data
-        const streakBonus = currentStreak * 0.1
-        
-        // Check if this roll completes a bonus sequence
-        const newBonusType = (() => {
-          if (bonusType) return bonusType
-          if (isMegaBonusPotential && roll === 6) {
-            return 'MEGA_BONUS'
-          } else if (previousRolls.length >= 2 && 
-                    [...previousRolls.slice(-2), roll].every(r => r === 3)) {
-            return 'MINI_BONUS'
-          }
-          return null
-        })()
-
-        // Calculate final payout including bonus
-        let finalPayout = payout
-        let finalMultiplier = multiplier
-        if (newBonusType && !bonusType) {
-          const bonusMultiplier = newBonusType === 'MEGA_BONUS' ? 10 : 5
-          finalPayout = payout * bonusMultiplier
-          finalMultiplier = multiplier * bonusMultiplier
-        }
-
-        // Update session stats based on roll outcome
-        if (roll === 1) {
-          // Update win rate on bust
-          setSessionStats(prev => ({
-            ...prev,
-            winRate: (prev.wins / prev.totalGames) * 100
-          }))
-        } else if (finalPayout > currentBank) {
-          // Count as a win if payout is higher than current bank
-          setSessionStats(prev => {
-            const newWins = prev.wins + 1
-            return {
-              ...prev,
-              wins: newWins,
-              winRate: (newWins / prev.totalGames) * 100,
-              highestWin: finalPayout > prev.highestWin ? finalPayout : prev.highestWin
-            }
-          })
-        }
-
-        // Set the roll value to trigger animation
-        setLastRoll(roll)
-        
-        // Store roll result for animation completion
-        const rollData = {
-          roll,
-          payout: finalPayout,
-          multiplier: finalMultiplier,
-          bonusType: newBonusType,
-          streakBonus
-        }
-        
-        // Don't update other state until animation completes
-        setRollResult(rollData)
+      // Handle bonus rounds
+      if (newBonusType) {
+        state.setBonusType(newBonusType)
+        state.setBonusRolls(newBonusRolls || [])
       }
+
+      // Update session stats
+      if (payout > state.currentBank) {
+        state.setSessionStats({
+          wins: state.sessionStats.wins + 1,
+          totalGames: state.sessionStats.totalGames + 1,
+          highestWin: Math.max(state.sessionStats.highestWin, payout),
+          winRate: ((state.sessionStats.wins + 1) / (state.sessionStats.totalGames + 1)) * 100,
+        })
+      } else {
+        state.setSessionStats({
+          totalGames: state.sessionStats.totalGames + 1,
+          winRate: (state.sessionStats.wins / (state.sessionStats.totalGames + 1)) * 100,
+        })
+      }
+
     } catch (error) {
       console.error('Roll error:', error)
+      // Refund the roll cost on error
+      state.setSessionBank(state.sessionBank + ROLL_COST)
       toast({
-        title: 'Error',
-        description: 'Failed to process roll',
-        variant: 'destructive',
+        title: "Roll Failed",
+        description: error instanceof Error ? error.message : "Failed to process roll. Please try again.",
+        variant: "destructive"
       })
-      // Return the roll cost on error
-      setSessionBank(prev => prev + ROLL_COST)
-      setCurrentBank(prev => prev - ROLL_COST)
-      setIsRolling(false)
+    } finally {
+      state.setRolling(false)
     }
   }
 
   function handleBust() {
-    // Update session stats for a loss
-    setSessionStats(prev => {
-      const newTotal = prev.totalGames + 1
-      return {
-        ...prev,
-        totalGames: newTotal,
-        winRate: (prev.wins / newTotal) * 100
-      }
-    })
-
-    setShowBust(true)
-    // Show bust animation for 4 seconds before resetting
-    setTimeout(() => {
-      setShowBust(false)
-      setGameStarted(false)
-      setCurrentBank(0)
-      setCurrentStreak(0)
-      setPreviousRolls([])
-      setBonusType(null)
-      setBonusRolls([])
-    }, 4000)
+    state.setShowBust(true)
+    state.setCurrentBank(0)
+    state.setCurrentStreak(0)
+    state.setGameStarted(false)
+    state.setPreviousRolls([])  // Reset dice history
+    state.setCurrentRoll([])    // Also reset current roll
   }
 
   function handleCashout() {
-    // Update highest win if current bank is higher
-    if (currentBank > sessionStats.highestWin) {
-      setSessionStats(prev => ({
-        ...prev,
-        highestWin: currentBank
-      }))
+    if (state.currentBank <= 0) return
+    
+    if (state.currentBank > state.sessionStats.highestWin) {
+      state.setSessionStats({
+        highestWin: state.currentBank
+      })
     }
-
-    // Count this as a win since player is cashing out
-    setSessionStats(prev => {
-      const newWins = prev.wins + 1
-      const newTotal = prev.totalGames + 1
-      return {
-        ...prev,
-        wins: newWins,
-        totalGames: newTotal,
-        winRate: (newWins / newTotal) * 100
-      }
-    })
-
-    // Show cashout information
-    toast({
-      title: 'Cashed Out!',
-      description: `Added ${currentBank.toFixed(3)} ETH to your session bank`,
-      variant: 'success',
+    
+    state.setSessionStats({
+      wins: state.sessionStats.wins + 1,
+      totalGames: state.sessionStats.totalGames + 1,
+      winRate: ((state.sessionStats.wins + 1) / (state.sessionStats.totalGames + 1)) * 100
     })
     
-    // Add current bank to session bank
-    setSessionBank(prev => prev + currentBank)
-    setGameStarted(false)
-    setCurrentBank(0)
-    setCurrentStreak(0)
-    setPreviousRolls([])
-    setBonusType(null)
-    setBonusRolls([])
+    // Add to recent winners if win is significant (> 1 PIG)
+    if (state.currentBank >= 1) {
+      state.addRecentWinner({
+        address: userId || '0x000...000',
+        amount: `${state.currentBank.toFixed(3)} PIG`
+      })
+    }
+    
+    state.setSessionBank(state.sessionBank + state.currentBank)
+    state.setGameStarted(false)
+    state.setCurrentBank(0)
+    state.setCurrentStreak(0)
+    state.setPreviousRolls([])  // Reset dice history
+    state.setCurrentRoll([])    // Also reset current roll
+    
+    toast({
+      title: 'Cashed Out!',
+      description: `Added ${state.currentBank.toFixed(3)} PIG to your session bank`,
+      variant: 'success'
+    })
   }
 
-  // New functions for session bank management
   function handleDeposit(amount: number) {
-    setSessionBank(prev => prev + amount)
+    state.setSessionBank(state.sessionBank + amount)
     toast({
       title: 'Deposit Successful',
-      description: `Added ${amount.toFixed(3)} ETH to your session bank`,
-      variant: 'success',
+      description: `Added ${amount.toFixed(3)} PIG to your session bank`,
+      variant: 'success'
     })
   }
 
   function handleWithdraw(amount: number) {
-    if (amount <= sessionBank) {
-      setSessionBank(prev => prev - amount)
-      // TODO: Implement actual withdrawal to user's wallet
+    if (amount <= state.sessionBank) {
+      state.setSessionBank(state.sessionBank - amount)
       toast({
         title: 'Withdrawal Successful',
-        description: `Withdrew ${amount.toFixed(3)} ETH from your session bank`,
-        variant: 'success',
+        description: `Withdrew ${amount.toFixed(3)} PIG from your session bank`,
+        variant: 'success'
       })
       return true
     }
-    toast({
-      title: 'Withdrawal Failed',
-      description: 'Insufficient funds in session bank',
-      variant: 'destructive',
-    })
     return false
   }
 
   function handleRollComplete() {
-    if (!rollResult) {
-      setIsRolling(false)
-      return
-    }
-
-    const { roll, payout, multiplier, bonusType, streakBonus } = rollResult
-
-    // Update game state after animation completes
-    if (bonusType) {
-      setBonusType(bonusType)
-      setCurrentBank(payout)
-    } else if (roll === 1) {
-      setShowBust(true)
-      setCurrentBank(0)
-      setCurrentStreak(0)
-    } else {
-      setCurrentBank(payout)
-      setCurrentStreak(prev => prev + 1)
-    }
-
-    setPreviousRolls(prev => [...prev, roll])
-    
-    // Show roll result toast after animation completes
-    toast({
-      title: `Rolled a ${roll}!`,
-      description: getRollDescription(roll, multiplier, streakBonus),
-      variant: getRollVariant(roll),
-    })
-
-    // Show bonus toast if applicable
-    if (bonusType) {
-      toast({
-        title: `${bonusType === 'MEGA_BONUS' ? '🌟 MEGA BONUS!' : '✨ MINI BONUS!'}`,
-        description: `Multiplier: ${multiplier}x\nNew Bank: ${payout.toFixed(3)} ETH`,
-        variant: bonusType === 'MEGA_BONUS' ? 'warning' : 'info',
-      })
-    }
-
-    // Clear roll result and rolling state
-    setRollResult(null)
-    setIsRolling(false)
+    console.log('handleRollComplete', { currentRoll: state.currentRoll })
+    state.setRolling(false)
   }
 
   function handleBonusDismiss() {
-    setBonusType(null)
-    setIsRolling(false)
+    state.setBonusType(null)
+    state.setBonusRolls([])
   }
 
   function handleBustDismiss() {
-    setShowBust(false)
-    setGameStarted(false)
-    setCurrentBank(0)
-    setCurrentStreak(0)
-    setPreviousRolls([])
-    setBonusType(null)
-    setBonusRolls([])
+    state.setShowBust(false)
   }
 
   function simulateMegaBonus() {
-    setBonusType('MEGA_BONUS')
-    const rolls = Array.from({ length: 3 }, () => Math.floor(Math.random() * 6) + 1)
-    setBonusRolls(rolls)
-    const sum = rolls.reduce((a, b) => a + b, 0)
-    const multiplier = 3 + ((sum - 3) * (15 - 3) / (18 - 3))
-    const newBank = currentBank * multiplier
-    setCurrentBank(newBank)
-    
-    toast({
-      title: '🌟 MEGA BONUS! 🌟',
-      description: `Rolled ${rolls.join(', ')}\nMultiplier: ${multiplier.toFixed(2)}x\nBank: ${newBank.toFixed(3)} ETH`,
-      variant: 'warning',
-    })
-    
-    setTimeout(() => {
-      setBonusType(null)
-      setBonusRolls([])
-    }, 8000)
+    if (process.env.NODE_ENV !== 'development') return
+    state.setBonusType('MEGA_BONUS')
+    state.setBonusRolls([6, 6, 6])
+    state.setCurrentBank(state.currentBank * 5)
   }
 
   function simulateMiniBonusBonus() {
-    setBonusType('MINI_BONUS')
-    const rolls = Array.from({ length: 2 }, () => Math.floor(Math.random() * 6) + 1)
-    setBonusRolls(rolls)
-    const sum = rolls.reduce((a, b) => a + b, 0)
-    const multiplier = 1.5 + ((sum - 2) * (5 - 1.5) / (12 - 2))
-    const newBank = currentBank * multiplier
-    setCurrentBank(newBank)
-    
-    toast({
-      title: '✨ MINI BONUS! ✨',
-      description: `Rolled ${rolls.join(', ')}\nMultiplier: ${multiplier.toFixed(2)}x\nBank: ${newBank.toFixed(3)} ETH`,
-      variant: 'info',
-    })
-    
-    setTimeout(() => {
-      setBonusType(null)
-      setBonusRolls([])
-    }, 8000)
+    if (process.env.NODE_ENV !== 'development') return
+    state.setBonusType('MINI_BONUS')
+    state.setBonusRolls([3, 3])
+    state.setCurrentBank(state.currentBank * 2)
   }
 
   return {
-    isRolling,
-    lastRoll,
-    currentBank,
-    sessionBank,
-    currentStreak,
-    previousRolls,
-    gameStarted,
-    bonusType,
-    bonusRolls,
-    showBust,
-    sessionStats,
+    ...state,
     handleStartGame,
     handleRoll,
     handleBust,
@@ -533,9 +475,6 @@ export function useGameState(userId?: string): UseGameStateReturn {
     handleDeposit,
     handleWithdraw,
     simulateMegaBonus,
-    simulateMiniBonusBonus,
-    setCurrentBank,
+    simulateMiniBonusBonus
   }
 }
-
-export default useGameState 
