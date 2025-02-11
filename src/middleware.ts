@@ -1,14 +1,23 @@
 import { NextResponse, NextRequest } from "next/server"
 import { verifyAuthToken } from "@/lib/auth"
 
+interface VerifyError extends Error {
+  details?: unknown
+}
+
 // Paths that require authentication
 const PROTECTED_PATHS = ["/game", "/api/game"]
 
 // Paths that are always allowed
-const PUBLIC_PATHS = ["/", "/api/auth"]
+const PUBLIC_PATHS = ["/", "/api/auth", "/_next", "/favicon.ico"]
 
 export default async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // Allow public paths to pass through
+  if (PUBLIC_PATHS.some(path => pathname.startsWith(path))) {
+    return NextResponse.next()
+  }
 
   // Check if the path needs protection
   const isProtectedPath = PROTECTED_PATHS.some(path => pathname.startsWith(path))
@@ -19,7 +28,6 @@ export default async function middleware(request: NextRequest) {
   try {
     // Get token from cookie
     const token = request.cookies.get('privy-token')?.value
-    console.log('Checking token from cookie...')
     
     if (!token) {
       console.log('No token found in cookies')
@@ -34,7 +42,6 @@ export default async function middleware(request: NextRequest) {
       },
     })
 
-    // Verify the auth token
     try {
       const { userId } = await verifyAuthToken(requestWithAuth)
       console.log('Token verified successfully for user:', userId)
@@ -49,13 +56,22 @@ export default async function middleware(request: NextRequest) {
       })
       return response
     } catch (verifyError) {
-      console.error('Token verification failed:', verifyError)
-      throw verifyError
+      const error = verifyError as VerifyError
+      console.error('Token verification failed:', {
+        error,
+        message: error.message,
+        details: error.details
+      })
+
+      // If token is expired or invalid, clear it and redirect to home
+      const response = NextResponse.redirect(new URL("/", request.url))
+      response.cookies.delete('privy-token')
+      return response
     }
   } catch (error) {
     console.error('Middleware error:', error)
     
-    // Clear the invalid token
+    // Clear the invalid token and redirect
     const response = NextResponse.redirect(new URL("/", request.url))
     response.cookies.delete('privy-token')
     return response
@@ -66,11 +82,8 @@ export const config = {
   // Specify which paths the middleware should run on
   matcher: [
     /*
-     * Match all request paths except:
-     * 1. Public paths
-     * 2. Static files (/_next/, /images/, etc.)
-     * 3. API routes that don't need protection
+     * Match all request paths except static files
      */
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    "/((?!_next/static|_next/image|assets/|favicon.ico).*)",
   ],
 } 
