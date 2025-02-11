@@ -1,22 +1,24 @@
 import { describe, it, expect, vi } from 'vitest'
 import { NextRequest } from 'next/server'
-import { getAuthToken } from "./auth"
+import { verifyAuthToken } from "./auth"
 
-// Mock the entire auth module
-vi.mock('./auth', () => ({
-  verifyAuthToken: async (request: NextRequest) => {
-    const authHeader = request.headers.get("authorization")
-    if (!authHeader?.startsWith("Bearer ")) {
-      throw new Error("Missing or invalid authorization header")
-    }
-
-    const token = authHeader.split(" ")[1]
-    return { userId: 'mock-user-id' }
-  },
+// Mock the entire privy-io/server-auth module
+vi.mock('@privy-io/server-auth', () => ({
+  PrivyClient: vi.fn().mockImplementation(() => ({
+    verifyAuthToken: vi.fn().mockImplementation((token: string) => {
+      if (!token) throw new Error("Invalid token")
+      return Promise.resolve({ 
+        id: 'mock-user-id',
+        email: 'test@example.com',
+        wallet: {
+          address: '0x123'
+        }
+      })
+    })
+  }))
 }))
 
 describe('verifyAuthToken', () => {
-  const mockToken = 'mock-token'
   const mockUserId = 'mock-user-id'
   
   function createMockRequest(token?: string): NextRequest {
@@ -26,29 +28,22 @@ describe('verifyAuthToken', () => {
   }
 
   it('successfully verifies a valid token', async () => {
-    const request = createMockRequest(mockToken)
-    const { verifyAuthToken } = await import('./auth')
+    const request = createMockRequest('valid-token')
     const result = await verifyAuthToken(request)
     
-    expect(result).toEqual({ userId: mockUserId })
+    expect(result).toEqual({
+      id: mockUserId,
+      email: 'test@example.com',
+      wallet: {
+        address: '0x123'
+      }
+    })
   })
 
   it('throws error when no authorization header is present', async () => {
     const request = createMockRequest()
-    const { verifyAuthToken } = await import('./auth')
     await expect(verifyAuthToken(request)).rejects.toThrow(
       'Missing or invalid authorization header'
     )
   })
-})
-
-describe("getAuthToken", () => {
-  it("returns null when no token is found", () => {
-    expect(getAuthToken()).toBeNull();
-  });
-
-  it("returns token when found", () => {
-    // Mock implementation
-    expect(getAuthToken()).toBeNull();
-  });
-}); 
+}) 
