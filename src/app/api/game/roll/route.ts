@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { verifyAuthToken } from "@/lib/auth"
 import { z } from "zod"
 
+// Specify Node.js runtime for API routes
+export const runtime = 'nodejs'
+
 // Validation schema for request body
 const RollRequestSchema = z.object({
   betAmount: z.number().min(0.01).max(1),
@@ -137,10 +140,10 @@ function calculatePayout(
 export async function POST(request: NextRequest) {
   try {
     // Verify auth token
-    const { userId } = await verifyAuthToken(request)
-    if (!userId) {
+    const authResult = await verifyAuthToken(request)
+    if (!authResult.isAuthenticated || !authResult.userId) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" },
+        { success: false, error: "Unauthorized", code: "AUTH_REQUIRED" },
         { status: 401 }
       )
     }
@@ -181,7 +184,7 @@ export async function POST(request: NextRequest) {
       data: {
         roll,
         ...result,
-        userId
+        userId: authResult.userId
       }
     })
 

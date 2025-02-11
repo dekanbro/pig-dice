@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { verifyAuthToken } from "./lib/auth";
 
-export const runtime = 'nodejs'
+// Remove runtime specification since we're not using Node.js specific features
+// export const runtime = 'nodejs'
 
-export async function middleware(request: NextRequest) {
+export async function middleware() {
   // Create base response
   const response = NextResponse.next()
 
@@ -17,28 +16,7 @@ export async function middleware(request: NextRequest) {
     'max-age=31536000; includeSubDomains'
   )
 
-  // Only protect /api/game routes
-  if (request.nextUrl.pathname.startsWith("/api/game")) {
-    try {
-      const authResult = await verifyAuthToken(request);
-      if (!authResult.isAuthenticated) {
-        return NextResponse.json(
-          { error: "Unauthorized", code: "AUTH_REQUIRED" },
-          { status: 401 }
-        );
-      }
-      // Add user ID to headers for downstream use
-      response.headers.set('X-User-ID', authResult.userId!)
-    } catch (error) {
-      console.error('Middleware auth error:', error)
-      return NextResponse.json(
-        { error: "Internal server error", code: "AUTH_ERROR" },
-        { status: 500 }
-      );
-    }
-  }
-
-  return response;
+  return response
 }
 
 export const config = {
@@ -49,7 +27,6 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public (public files)
-     * Then, we only protect /api/game routes in the middleware function
      */
     "/((?!_next/static|_next/image|favicon.ico|public).*)",
   ],

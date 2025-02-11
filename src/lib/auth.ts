@@ -2,6 +2,7 @@
 import { NextRequest } from 'next/server'
 import { PrivyClient } from '@privy-io/server-auth'
 
+// Specify Node.js runtime for auth functions
 export const runtime = 'nodejs'
 
 if (!process.env.NEXT_PUBLIC_PRIVY_APP_ID) {
@@ -17,9 +18,10 @@ export interface AuthResult {
   userId?: string
 }
 
+// Initialize Privy client only in Node.js environment
 const privyClient = new PrivyClient(
-  process.env.NEXT_PUBLIC_PRIVY_APP_ID,
-  process.env.PRIVY_APP_SECRET
+  process.env.NEXT_PUBLIC_PRIVY_APP_ID!,
+  process.env.PRIVY_APP_SECRET!
 )
 
 export async function verifyAuthToken(req: NextRequest): Promise<AuthResult> {

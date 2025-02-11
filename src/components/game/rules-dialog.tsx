@@ -12,6 +12,14 @@ import {
 } from '@/components/ui/dialog'
 import { InfoCircledIcon } from '@radix-ui/react-icons'
 
+const strategyTips = [
+  "Start with smaller bets to build your streak multiplier.",
+  "Consider banking your winnings after hitting a high multiplier.",
+  "The streak bonus can significantly increase your potential returns.",
+  "Watch for consecutive 6's or 3's to trigger bonus rounds.",
+  "Remember that a single 1 will reset both your streak and bank."
+]
+
 export function RulesDialog() {
   return (
     <Dialog>
@@ -30,16 +38,6 @@ export function RulesDialog() {
         </DialogHeader>
         
         <div className="space-y-6">
-          {/* Basic Rules */}
-          <div>
-            <h3 className="font-semibold mb-2">Basic Rules</h3>
-            <ul className="list-disc pl-4 space-y-2">
-              <li>Start with a 0.01 ETH bet</li>
-              <li>Roll the dice and build your bank</li>
-              <li>Choose to cash out or push your luck after each roll</li>
-              <li>Rolling a 1 busts and you lose everything!</li>
-            </ul>
-          </div>
 
           {/* Payouts */}
           <div>
@@ -70,9 +68,9 @@ export function RulesDialog() {
           <div>
             <h3 className="font-semibold mb-2">Streak System</h3>
             <ul className="list-disc pl-4 space-y-2">
-              <li>Each successful roll increases your streak</li>
-              <li>Each streak level adds a 10% bonus to your multiplier</li>
-              <li>Streak resets if you bust or cash out</li>
+              {strategyTips.map((tip, index) => (
+                <li key={index}>{tip}</li>
+              ))}
             </ul>
           </div>
 
@@ -102,17 +100,6 @@ export function RulesDialog() {
             </div>
           </div>
 
-          {/* Strategy Tips */}
-          <div>
-            <h3 className="font-semibold mb-2">Strategy Tips</h3>
-            <ul className="list-disc pl-4 space-y-2">
-              <li>Higher streaks mean higher risk and reward</li>
-              <li>Consider cashing out after big wins</li>
-              <li>Watch for opportunities to trigger bonus rounds</li>
-              <li>Rolling 6&apos;s is safer now but can lead to huge bonus wins</li>
-              <li>Three 3&apos;s in a row is a safer bonus strategy</li>
-            </ul>
-          </div>
         </div>
       </DialogContent>
     </Dialog>

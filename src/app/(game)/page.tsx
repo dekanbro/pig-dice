@@ -35,15 +35,23 @@ export const mockJackpot = {
 export default function GamePage() {
   const { user } = usePrivy()
   const gameState = useGameState(user?.id)
-  const { sessionStats } = gameState
+  const { sessionBank, sessionStats, handleDeposit } = gameState
+
+  const handleTopUpSession = () => {
+    handleDeposit(1)
+  }
 
   return (
     <AuthCheck>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column - Stats */}
         <div className="lg:col-span-1 order-2 lg:order-1">
           <Suspense fallback={<div className="animate-pulse h-[200px] bg-muted rounded-lg" />}>
-            <GameStats sessionStats={sessionStats} />
+            <GameStats
+              sessionStats={sessionStats}
+              sessionBank={sessionBank}
+              onTopUpSession={handleTopUpSession}
+            />
           </Suspense>
         </div>
 
@@ -57,7 +65,23 @@ export default function GamePage() {
         {/* Right Column - Jackpot */}
         <div className="lg:col-span-1 order-3">
           <Suspense fallback={<div className="animate-pulse h-[300px] bg-muted rounded-lg" />}>
-            <JackpotDisplay jackpot={mockJackpot} />
+            <JackpotDisplay
+              jackpot={{
+                amount: '5.5 ETH',
+                recentWinners: [
+                  {
+                    address: '0x1234...5678',
+                    amount: '3.2 ETH',
+                    timestamp: '2 hours ago',
+                  },
+                  {
+                    address: '0x8765...4321',
+                    amount: '2.8 ETH',
+                    timestamp: '5 hours ago',
+                  },
+                ]
+              }}
+            />
           </Suspense>
         </div>
       </div>
