@@ -15,7 +15,7 @@ export function DebugPanel({
   setCurrentBank,
   currentBank
 }: DebugPanelProps) {
-  if (process.env.NODE_ENV !== 'development') {
+  if (process.env.NEXT_PUBLIC_SHOW_DEBUG_PANEL !== "true") {
     return null
   }
 

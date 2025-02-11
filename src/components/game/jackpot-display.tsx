@@ -71,6 +71,9 @@ export function JackpotDisplay({ jackpot }: JackpotDisplayProps) {
         <div className="space-y-4">
           <h4 className="text-sm font-semibold">Recent Winners</h4>
           <div className="space-y-2">
+            {jackpot.recentWinners.length == 0 && (
+              <div className="text-sm text-muted-foreground">No recent winners</div>
+            )}
             {jackpot.recentWinners.map((winner, index) => (
               <motion.div
                 key={index}
