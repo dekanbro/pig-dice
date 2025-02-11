@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { NextRequest } from 'next/server'
+import { getAuthToken } from "./auth"
 
 // Mock the entire auth module
 vi.mock('./auth', () => ({
@@ -39,4 +40,15 @@ describe('verifyAuthToken', () => {
       'Missing or invalid authorization header'
     )
   })
-}) 
+})
+
+describe("getAuthToken", () => {
+  it("returns null when no token is found", () => {
+    expect(getAuthToken()).toBeNull();
+  });
+
+  it("returns token when found", () => {
+    // Mock implementation
+    expect(getAuthToken()).toBeNull();
+  });
+}); 

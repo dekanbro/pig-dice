@@ -1,12 +1,10 @@
 'use client'
 
-import { usePrivy } from '@privy-io/react-auth'
 import { Button } from '@/components/ui/button'
+import { usePrivy } from '@privy-io/react-auth'
 import { type ButtonProps } from '@/components/ui/button'
 
-interface LoginButtonProps extends Pick<ButtonProps, 'className' | 'size'> {}
-
-export function LoginButton({ className, size = 'sm' }: LoginButtonProps) {
+export function LoginButton({ className, size = 'sm' }: Pick<ButtonProps, 'className' | 'size'>) {
   const { login, logout, authenticated, ready } = usePrivy()
 
   if (!ready) {

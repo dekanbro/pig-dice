@@ -1,21 +1,7 @@
-import { ReactElement } from 'react'
-import { render, RenderOptions } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { WagmiProvider, createConfig } from '@privy-io/wagmi'
-import { base } from 'viem/chains'
-import { http } from 'wagmi'
-import { vi } from 'vitest'
-
-// Mock Privy modules
-vi.mock('@privy-io/react-auth', () => ({
-  PrivyProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  usePrivy: vi.fn(),
-}))
-
-vi.mock('@privy-io/wagmi', () => ({
-  WagmiProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  createConfig: vi.fn().mockReturnValue({}),
-}))
+import { render as testingLibraryRender } from "@testing-library/react";
+import { ReactElement } from "react";
+import { PrivyProvider } from "@privy-io/react-auth";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,22 +9,17 @@ const queryClient = new QueryClient({
       retry: false,
     },
   },
-})
+});
 
-function Providers({ children }: { children: React.ReactNode }) {
-  return (
+function customRender(ui: ReactElement) {
+  return testingLibraryRender(
     <QueryClientProvider client={queryClient}>
-      {children}
+      <PrivyProvider appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ""}>
+        {ui}
+      </PrivyProvider>
     </QueryClientProvider>
-  )
+  );
 }
 
-function customRender(
-  ui: ReactElement,
-  options?: Omit<RenderOptions, 'wrapper'>,
-) {
-  return render(ui, { wrapper: Providers, ...options })
-}
-
-export * from '@testing-library/react'
-export { customRender as render } 
+export * from "@testing-library/react";
+export { customRender as render }; 

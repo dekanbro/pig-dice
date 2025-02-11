@@ -1,44 +1,47 @@
-import { NextRequest } from "next/server"
-import { PrivyClient } from "@privy-io/server-auth"
+import { cookies } from "next/headers";
+import { PrivyClient, AuthTokenClaims } from "@privy-io/server-auth";
+import { NextRequest } from "next/server";
 
-if (!process.env.NEXT_PUBLIC_PRIVY_APP_ID) {
-  throw new Error('NEXT_PUBLIC_PRIVY_APP_ID is not set')
+const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID || "";
+const PRIVY_APP_SECRET = process.env.PRIVY_APP_SECRET || "";
+
+interface AuthUser {
+  id: string;
+  email?: string;
+  wallet?: {
+    address: string;
+  };
 }
 
-if (!process.env.PRIVY_APP_SECRET) {
-  throw new Error('PRIVY_APP_SECRET is not set')
+interface AuthResult {
+  isAuthenticated: boolean;
+  userId?: string;
 }
 
-const privy = new PrivyClient(
-  process.env.NEXT_PUBLIC_PRIVY_APP_ID,
-  process.env.PRIVY_APP_SECRET
-)
+export const privy = new PrivyClient(PRIVY_APP_ID, PRIVY_APP_SECRET);
 
-export async function verifyAuthToken(request: NextRequest) {
+export async function getUser(token: string): Promise<AuthUser | null> {
+  if (!token) return null;
   try {
-    const authHeader = request.headers.get("authorization")
-    if (!authHeader?.startsWith("Bearer ")) {
-      console.error('Invalid auth header:', authHeader)
-      throw new Error("Missing or invalid authorization header")
+    const user = await privy.verifyAuthToken(token);
+    return user;
+  } catch (error) {
+    console.error("Error verifying auth token:", error);
+    return null;
+  }
+}
+
+export async function verifyAuthToken(request: NextRequest): Promise<AuthResult> {
+  try {
+    const token = request.headers.get("authorization")?.split(" ")[1];
+    if (!token) {
+      return { isAuthenticated: false };
     }
 
-    const token = authHeader.split(" ")[1]
-    console.log('Attempting to verify token...')
-    
-    try {
-      const verifiedUser = await privy.verifyAuthToken(token)
-      console.log('Token verified successfully:', verifiedUser)
-      return { userId: verifiedUser.userId }
-    } catch (verifyError: any) {
-      console.error('Privy verification error:', {
-        error: verifyError,
-        message: verifyError.message,
-        details: verifyError.details
-      })
-      throw new Error(`Token verification failed: ${verifyError.message}`)
-    }
+    const user = await privy.verifyAuthToken(token);
+    return { isAuthenticated: true, userId: user.userId };
   } catch (error) {
-    console.error("Auth error:", error)
-    throw error
+    console.error("Error verifying auth token:", error);
+    return { isAuthenticated: false };
   }
 } 

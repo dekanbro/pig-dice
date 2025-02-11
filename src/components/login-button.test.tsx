@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '../test/utils'
 import { LoginButton } from './login-button'
-import { usePrivy } from '@privy-io/react-auth'
+import { usePrivy, type PrivyInterface, type Wallet, type User } from '@privy-io/react-auth'
 
 // Mock usePrivy hook
 vi.mock('@privy-io/react-auth', () => ({
@@ -12,22 +12,16 @@ vi.mock('@privy-io/react-auth', () => ({
 describe('LoginButton', () => {
   it('renders connect wallet button when not authenticated', () => {
     const mockLogin = vi.fn()
-    vi.mocked(usePrivy).mockReturnValue({
+    const mockLogout = vi.fn()
+    const mockPrivy: Partial<PrivyInterface> = {
       login: mockLogin,
-      logout: vi.fn(),
+      logout: mockLogout,
       authenticated: false,
       ready: true,
       user: null,
-      connectWallet: vi.fn(),
-      createWallet: vi.fn(),
-      linkWallet: vi.fn(),
-      unlinkWallet: vi.fn(),
-      exportWallet: vi.fn(),
-      sendTransaction: vi.fn(),
-      signMessage: vi.fn(),
-      getAccessToken: vi.fn(),
-    } as any)
+    }
 
+    vi.mocked(usePrivy).mockReturnValue(mockPrivy as PrivyInterface)
     render(<LoginButton />)
     
     const button = screen.getByRole('button', { name: /connect wallet/i })
@@ -38,28 +32,33 @@ describe('LoginButton', () => {
   })
 
   it('renders disconnect button when authenticated', () => {
+    const mockLogin = vi.fn()
     const mockLogout = vi.fn()
-    vi.mocked(usePrivy).mockReturnValue({
-      login: vi.fn(),
+    const mockWallet: Wallet = {
+      address: '0x123',
+      chainType: 'ethereum',
+      imported: false,
+      delegated: false,
+      walletIndex: 0,
+    }
+    const mockUser: User = {
+      id: 'test-user',
+      createdAt: new Date(),
+      linkedAccounts: [],
+      mfaMethods: [],
+      wallet: mockWallet,
+      hasAcceptedTerms: true,
+      isGuest: false,
+    }
+    const mockPrivy: Partial<PrivyInterface> = {
+      login: mockLogin,
       logout: mockLogout,
       authenticated: true,
       ready: true,
-      user: {
-        id: 'test-user',
-        wallet: {
-          address: '0x123',
-        },
-      },
-      connectWallet: vi.fn(),
-      createWallet: vi.fn(),
-      linkWallet: vi.fn(),
-      unlinkWallet: vi.fn(),
-      exportWallet: vi.fn(),
-      sendTransaction: vi.fn(),
-      signMessage: vi.fn(),
-      getAccessToken: vi.fn(),
-    } as any)
+      user: mockUser,
+    }
 
+    vi.mocked(usePrivy).mockReturnValue(mockPrivy as PrivyInterface)
     render(<LoginButton />)
     
     const button = screen.getByRole('button', { name: /disconnect wallet/i })
@@ -70,23 +69,18 @@ describe('LoginButton', () => {
   })
 
   it('renders nothing when not ready', () => {
-    vi.mocked(usePrivy).mockReturnValue({
-      login: vi.fn(),
-      logout: vi.fn(),
+    const mockLogin = vi.fn()
+    const mockLogout = vi.fn()
+    const mockPrivy: Partial<PrivyInterface> = {
+      login: mockLogin,
+      logout: mockLogout,
       authenticated: false,
       ready: false,
       user: null,
-      connectWallet: vi.fn(),
-      createWallet: vi.fn(),
-      linkWallet: vi.fn(),
-      unlinkWallet: vi.fn(),
-      exportWallet: vi.fn(),
-      sendTransaction: vi.fn(),
-      signMessage: vi.fn(),
-      getAccessToken: vi.fn(),
-    } as any)
+    }
 
+    vi.mocked(usePrivy).mockReturnValue(mockPrivy as PrivyInterface)
     const { container } = render(<LoginButton />)
-    expect(container).toBeEmptyDOMElement()
+    expect(container.firstChild).toBeNull()
   })
 }) 

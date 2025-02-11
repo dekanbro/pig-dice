@@ -83,7 +83,7 @@ export function RulesDialog() {
               <div className="p-3 rounded bg-yellow-500/10 border border-yellow-500/20">
                 <h4 className="font-semibold text-yellow-500 mb-2">🌟 MEGA BONUS</h4>
                 <ul className="list-disc pl-4 space-y-1">
-                  <li>Triggered by rolling two 6's in a row</li>
+                  <li>Triggered by rolling two 6&apos;s in a row</li>
                   <li>Roll 3d6 for a special multiplier</li>
                   <li>Multiplier range: 3x to 15x</li>
                   <li>Applied to your entire current bank</li>
@@ -93,7 +93,7 @@ export function RulesDialog() {
               <div className="p-3 rounded bg-blue-500/10 border border-blue-500/20">
                 <h4 className="font-semibold text-blue-500 mb-2">✨ MINI BONUS</h4>
                 <ul className="list-disc pl-4 space-y-1">
-                  <li>Triggered by rolling three 3's in a row</li>
+                  <li>Triggered by rolling three 3&apos;s in a row</li>
                   <li>Roll 2d6 for a special multiplier</li>
                   <li>Multiplier range: 1.5x to 5x</li>
                   <li>Applied to your entire current bank</li>
@@ -109,8 +109,8 @@ export function RulesDialog() {
               <li>Higher streaks mean higher risk and reward</li>
               <li>Consider cashing out after big wins</li>
               <li>Watch for opportunities to trigger bonus rounds</li>
-              <li>Rolling 6's is safer now but can lead to huge bonus wins</li>
-              <li>Three 3's in a row is a safer bonus strategy</li>
+              <li>Rolling 6&apos;s is safer now but can lead to huge bonus wins</li>
+              <li>Three 3&apos;s in a row is a safer bonus strategy</li>
             </ul>
           </div>
         </div>
