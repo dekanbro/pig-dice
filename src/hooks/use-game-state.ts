@@ -2,9 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { toast } from '@/components/ui/use-toast'
 import { getCookie } from 'cookies-next'
-
-const ROLL_COST = 0.01
-const INITIAL_JACKPOT = 5.5
+import { STANDARD_MULTIPLIERS, GAME_CONFIG } from '@/lib/constants'
 
 // Convert number to fixed precision (3 decimals) to avoid floating point issues
 function toFixed3(num: number): number {
@@ -12,20 +10,25 @@ function toFixed3(num: number): number {
 }
 
 // Helper function to get roll description
-export function getRollDescription(roll: number) {
+export function getRollDescription(roll: number, streakBonus?: number) {
+  const baseMultiplier = STANDARD_MULTIPLIERS[roll as keyof typeof STANDARD_MULTIPLIERS]
+  const finalMultiplier = roll === 1 ? 0 : baseMultiplier + (streakBonus || 0)
+  const percentage = (finalMultiplier * 100).toFixed(0)
+  const bonusText = streakBonus ? ` (+${(streakBonus * 100).toFixed(0)}% streak)` : ''
+
   switch (roll) {
     case 1:
       return 'Bust! You lose everything'
     case 2:
-      return `Small loss `
+      return `Keep ${percentage}% of your bank${bonusText}`
     case 3:
-      return `Break even - Bonus chance!`
+      return `Break even${bonusText} - Bonus chance!`
     case 4:
-      return `Small win `
+      return `Win ${percentage}% of your bank${bonusText}`
     case 5:
-      return `Medium win `
+      return `Win ${percentage}% of your bank${bonusText}`
     case 6:
-      return `Break even - Bonus chance!`
+      return `Break even${bonusText} - Bonus chance!`
     default:
       return 'Invalid roll'
   }
@@ -120,7 +123,7 @@ const initialState: GameState = {
     mega: null,
     mini: null
   },
-  jackpotAmount: INITIAL_JACKPOT,
+  jackpotAmount: GAME_CONFIG.INITIAL_JACKPOT,
   lastJackpotContribution: null,
   recentWinners: []
 }
@@ -148,16 +151,34 @@ export const useGameStore = create<GameState & GameActions>()(
           lastBonusCooldown: { ...state.lastBonusCooldown, ...cooldown }
         })),
       setJackpotAmount: (amount) => {
-        const fixedAmount = toFixed3(amount)
-        console.log('Setting jackpot amount:', { 
-          oldAmount: toFixed3(get().jackpotAmount),
-          newAmount: fixedAmount,
-          contribution: toFixed3(fixedAmount - get().jackpotAmount)
+        // Get raw values first
+        const rawNewAmount = Number(amount.toFixed(10))
+        const rawOldAmount = Number(get().jackpotAmount.toFixed(10))
+        const rawContribution = Number((rawNewAmount - rawOldAmount).toFixed(10))
+        
+        // Then apply fixed precision for display
+        const fixedAmount = toFixed3(rawNewAmount)
+        const fixedOldAmount = toFixed3(rawOldAmount)
+        const fixedContribution = toFixed3(rawContribution)
+        
+        console.log('Setting jackpot amount (detailed):', { 
+          rawOldAmount,
+          rawNewAmount,
+          rawContribution,
+          fixedOldAmount,
+          fixedAmount,
+          fixedContribution,
+          beforeRounding: {
+            sum: Number((rawOldAmount + GAME_CONFIG.ROLL_COST).toFixed(10)),
+            difference: Number((rawOldAmount + GAME_CONFIG.ROLL_COST - rawOldAmount).toFixed(10))
+          }
         })
-        set((state) => ({ 
-          jackpotAmount: fixedAmount,
-          lastJackpotContribution: toFixed3(fixedAmount - state.jackpotAmount)
-        }))
+
+        // Store raw values in state to prevent precision loss
+        set({ 
+          jackpotAmount: rawNewAmount,
+          lastJackpotContribution: rawContribution > 0 ? toFixed3(rawContribution) : null
+        })
       },
       setLastJackpotContribution: (amount) => set({ 
         lastJackpotContribution: amount !== null ? toFixed3(amount) : null 
@@ -176,8 +197,9 @@ export const useGameStore = create<GameState & GameActions>()(
     {
       name: 'game-storage',
       partialize: (state) => {
+        // Don't round the jackpot amount in persistence
         const partialState = {
-          jackpotAmount: toFixed3(state.jackpotAmount),
+          jackpotAmount: state.jackpotAmount,
           sessionStats: state.sessionStats,
           sessionBank: toFixed3(state.sessionBank),
           recentWinners: state.recentWinners
@@ -214,12 +236,12 @@ export function useGameState(userId?: string): UseGameStateReturn {
   const state = useGameStore()
   
   async function handleStartGame() {
-    if (!userId || state.sessionBank < ROLL_COST) return
+    if (!userId || state.sessionBank < GAME_CONFIG.ROLL_COST) return
     
     // Reset all game state
     state.setGameStarted(true)
-    state.setSessionBank(state.sessionBank - ROLL_COST)
-    state.setCurrentBank(ROLL_COST)
+    state.setSessionBank(state.sessionBank - GAME_CONFIG.ROLL_COST)
+    state.setCurrentBank(GAME_CONFIG.ROLL_COST)
     state.setCurrentStreak(0)
     state.setPreviousRolls([])
     state.setCurrentRoll([])
@@ -244,10 +266,10 @@ export function useGameState(userId?: string): UseGameStateReturn {
     if (!state.gameStarted && state.isRolling) return
 
     // Check if we have enough session bank for the roll
-    if (state.sessionBank < ROLL_COST) {
+    if (state.sessionBank < GAME_CONFIG.ROLL_COST) {
       toast({
         title: "Insufficient Session Bank",
-        description: "You need at least 0.01 PIG in your session bank to roll.",
+        description: `You need at least ${GAME_CONFIG.ROLL_COST} PIG in your session bank to roll.`,
         variant: "destructive"
       })
       return
@@ -265,22 +287,11 @@ export function useGameState(userId?: string): UseGameStateReturn {
 
     try {
       state.setRolling(true)
-      state.setSessionBank(state.sessionBank - ROLL_COST)
+      state.setSessionBank(state.sessionBank - GAME_CONFIG.ROLL_COST)
 
-      // Add roll cost to jackpot after first roll in streak
-      if (state.currentStreak > 0) {
-        console.log('Adding to jackpot:', { 
-          currentAmount: toFixed3(state.jackpotAmount),
-          contribution: ROLL_COST,
-          streak: state.currentStreak
-        })
-        const newJackpotAmount = toFixed3(state.jackpotAmount + ROLL_COST)
-        state.setJackpotAmount(newJackpotAmount)
-      } else {
-        console.log('First roll in streak, no jackpot contribution')
-        state.setLastJackpotContribution(null)
-      }
-
+      // Get initial jackpot amount
+      const initialJackpot = state.jackpotAmount
+      
       const response = await fetch('/api/game/roll', {
         method: 'POST',
         headers: {
@@ -288,7 +299,7 @@ export function useGameState(userId?: string): UseGameStateReturn {
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          betAmount: ROLL_COST,
+          betAmount: GAME_CONFIG.ROLL_COST,
           currentBank: state.currentBank,
           currentStreak: state.currentStreak,
           previousRolls: state.previousRolls,
@@ -308,12 +319,25 @@ export function useGameState(userId?: string): UseGameStateReturn {
         bonusRolls: newBonusRolls,
         isBust,
         newStreak,
+        jackpotContribution,
+        multiplier
       } = data
 
       // Update game state
       state.setCurrentRoll([roll])
       state.setCurrentStreak(newStreak)
       
+      // Log the actual multiplier and payout details
+      console.log('Roll result:', {
+        roll,
+        baseMultiplier: STANDARD_MULTIPLIERS[roll as keyof typeof STANDARD_MULTIPLIERS],
+        finalMultiplier: multiplier,
+        currentBank: state.currentBank,
+        payout,
+        currentStreak: state.currentStreak,
+        newStreak
+      })
+
       // Handle different roll outcomes
       if (isBust) {
         // Handle bust
@@ -322,15 +346,37 @@ export function useGameState(userId?: string): UseGameStateReturn {
         state.setGameStarted(false)
         state.setPreviousRolls([])  // Reset dice history on bust
         state.setCurrentRoll([])    // Also reset current roll
-      } else if (roll === 3 || roll === 6) {
-        // Break even - keep current bank the same
-        // Do nothing to currentBank as it should stay the same
-        state.setPreviousRolls([...state.previousRolls, roll])
       } else {
-        // Handle win/loss cases
-        state.setCurrentBank(Math.max(0, payout))
+        // Handle all non-bust cases
+        console.log('Setting new bank amount:', {
+          currentBank: state.currentBank,
+          payout,
+          roll,
+          multiplier,
+          streak: state.currentStreak
+        })
+        state.setCurrentBank(toFixed3(payout))  // Ensure we use toFixed3 here
         state.setPreviousRolls([...state.previousRolls, roll])
       }
+
+      // Update jackpot in a single place
+      // Always add roll cost first
+      const newJackpot = initialJackpot + GAME_CONFIG.ROLL_COST
+      
+      // Then add any additional contribution
+      const finalJackpot = jackpotContribution > 0 
+        ? newJackpot + jackpotContribution
+        : newJackpot
+
+      console.log('Jackpot update:', {
+        initialJackpot,
+        rollCost: GAME_CONFIG.ROLL_COST,
+        newJackpot,
+        jackpotContribution,
+        finalJackpot
+      })
+
+      state.setJackpotAmount(finalJackpot)
 
       // Handle bonus rounds
       if (newBonusType) {
@@ -339,24 +385,18 @@ export function useGameState(userId?: string): UseGameStateReturn {
       }
 
       // Update session stats
-      if (payout > state.currentBank) {
-        state.setSessionStats({
-          wins: state.sessionStats.wins + 1,
-          totalGames: state.sessionStats.totalGames + 1,
-          highestWin: Math.max(state.sessionStats.highestWin, payout),
-          winRate: ((state.sessionStats.wins + 1) / (state.sessionStats.totalGames + 1)) * 100,
-        })
-      } else {
-        state.setSessionStats({
-          totalGames: state.sessionStats.totalGames + 1,
-          winRate: (state.sessionStats.wins / (state.sessionStats.totalGames + 1)) * 100,
-        })
-      }
+      const isWin = multiplier > 1
+      state.setSessionStats({
+        totalGames: state.sessionStats.totalGames + 1,
+        wins: isWin ? state.sessionStats.wins + 1 : state.sessionStats.wins,
+        highestWin: Math.max(state.sessionStats.highestWin, payout),
+        winRate: (state.sessionStats.wins / (state.sessionStats.totalGames + 1)) * 100,
+      })
 
     } catch (error) {
       console.error('Roll error:', error)
       // Refund the roll cost on error
-      state.setSessionBank(state.sessionBank + ROLL_COST)
+      state.setSessionBank(state.sessionBank + GAME_CONFIG.ROLL_COST)
       toast({
         title: "Roll Failed",
         description: error instanceof Error ? error.message : "Failed to process roll. Please try again.",
@@ -391,8 +431,8 @@ export function useGameState(userId?: string): UseGameStateReturn {
       winRate: ((state.sessionStats.wins + 1) / (state.sessionStats.totalGames + 1)) * 100
     })
     
-    // Add to recent winners if win is significant (> 1 PIG)
-    if (state.currentBank >= 1) {
+    // Add to recent winners if win is significant
+    if (state.currentBank >= GAME_CONFIG.SIGNIFICANT_WIN) {
       state.addRecentWinner({
         address: userId || '0x000...000',
         amount: `${state.currentBank.toFixed(3)} PIG`

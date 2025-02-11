@@ -52,7 +52,7 @@ export function JackpotDisplay({ jackpot }: JackpotDisplayProps) {
                 <div className="text-4xl font-bold bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-500 text-transparent bg-clip-text">
                   {jackpot.amount}
                 </div>
-                {jackpot.lastContribution && (
+                {jackpot.lastContribution && jackpot.lastContribution > 0 && (
                   <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}

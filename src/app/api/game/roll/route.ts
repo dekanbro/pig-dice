@@ -1,44 +1,31 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyAuthToken } from "@/lib/auth"
+import { STANDARD_MULTIPLIERS, JACKPOT_RATES, GAME_CONFIG } from "@/lib/constants"
 import { z } from "zod"
 
 // Specify Node.js runtime for API routes
 export const runtime = 'nodejs'
 
+// Helper function to fix floating point precision
+function toFixed3(num: number): number {
+  return Number(num.toFixed(3))
+}
+
 // Validation schema for request body
 const RollRequestSchema = z.object({
-  betAmount: z.number().min(0.01).max(1),
+  betAmount: z.number().min(GAME_CONFIG.ROLL_COST).max(GAME_CONFIG.MAX_BET),
   currentStreak: z.number().min(0).default(0),
   currentBank: z.number().min(0).default(0),
   previousRolls: z.array(z.number()).default([]),
 })
-
-// Payout multipliers for standard rolls
-const STANDARD_MULTIPLIERS = {
-  1: 0, // Bust - 50% to jackpot
-  2: 0.2, // Small loss
-  3: 0, // Break even
-  4: 1.2, // Small win
-  5: 1.5, // Medium win
-  6: 0, // Break even
-} as const
-
-// Jackpot contribution rates
-const JACKPOT_RATES = {
-  INITIAL_DEPOSIT: 0.05, // 5% of initial deposit
-  ROLL_CONTRIBUTION: 0.02, // 2% of potential winnings
-  BUST_CONTRIBUTION: 0.5, // 50% of lost amount
-  MEGA_BONUS_WIN_CHANCE: 0.05, // 5% chance
-  MINI_BONUS_WIN_CHANCE: 0.01, // 1% chance
-} as const
 
 // Bonus types
 type BonusType = 'MEGA_BONUS' | 'MINI_BONUS' | null
 
 // Check for bonus round triggers
 function checkBonusRound(previousRolls: number[]): BonusType {
-  if (previousRolls.length < 3) return null
-  const lastThree = previousRolls.slice(-3)
+  if (previousRolls.length < GAME_CONFIG.MEGA_BONUS.REQUIRED_ROLLS) return null
+  const lastThree = previousRolls.slice(-GAME_CONFIG.MEGA_BONUS.REQUIRED_ROLLS)
   
   // Check for MEGA BONUS (three 6's in a row)
   if (lastThree.every(roll => roll === 6)) {
@@ -46,8 +33,9 @@ function checkBonusRound(previousRolls: number[]): BonusType {
   }
   
   // Check for MINI BONUS (three 3's in a row)
-  if (previousRolls.length >= 3) {
-    if (lastThree.every(roll => roll === 3)) {
+  if (previousRolls.length >= GAME_CONFIG.MINI_BONUS.REQUIRED_ROLLS) {
+    const lastThreeMini = previousRolls.slice(-GAME_CONFIG.MINI_BONUS.REQUIRED_ROLLS)
+    if (lastThreeMini.every(roll => roll === 3)) {
       return 'MINI_BONUS'
     }
   }
@@ -55,43 +43,39 @@ function checkBonusRound(previousRolls: number[]): BonusType {
   return null
 }
 
-// Calculate mega bonus multiplier (3d6)
+// Calculate mega bonus multiplier
 function calculateMegaBonusMultiplier(): { rolls: number[], multiplier: number, wonJackpot: boolean } {
-  const rolls = Array.from({ length: 3 }, () => Math.floor(Math.random() * 6) + 1)
+  const rolls = Array.from({ length: GAME_CONFIG.MEGA_BONUS.DICE_COUNT }, () => Math.floor(Math.random() * 6) + 1)
   const sum = rolls.reduce((a, b) => a + b, 0)
   
-  // Scale multiplier based on sum (3-18)
-  // Min sum = 3 (1+1+1) = 2x
-  // Max sum = 18 (6+6+6) = 10x
-  const multiplier = 2 + ((sum - 3) * (10 - 2) / (18 - 3))
-  
-  // 5% chance to win jackpot
-  const wonJackpot = Math.random() < JACKPOT_RATES.MEGA_BONUS_WIN_CHANCE
+  // Scale multiplier based on sum
+  const minSum = GAME_CONFIG.MEGA_BONUS.DICE_COUNT // All 1's
+  const maxSum = GAME_CONFIG.MEGA_BONUS.DICE_COUNT * 6 // All 6's
+  const multiplier = GAME_CONFIG.MEGA_BONUS.MIN_MULTIPLIER + 
+    ((sum - minSum) * (GAME_CONFIG.MEGA_BONUS.MAX_MULTIPLIER - GAME_CONFIG.MEGA_BONUS.MIN_MULTIPLIER) / (maxSum - minSum))
   
   return { 
     rolls, 
     multiplier: Number(multiplier.toFixed(2)),
-    wonJackpot
+    wonJackpot: Math.random() < JACKPOT_RATES.MEGA_BONUS_WIN_CHANCE
   }
 }
 
-// Calculate mini bonus multiplier (2d6)
+// Calculate mini bonus multiplier
 function calculateMiniBonusMultiplier(): { rolls: number[], multiplier: number, wonJackpot: boolean } {
-  const rolls = Array.from({ length: 2 }, () => Math.floor(Math.random() * 6) + 1)
+  const rolls = Array.from({ length: GAME_CONFIG.MINI_BONUS.DICE_COUNT }, () => Math.floor(Math.random() * 6) + 1)
   const sum = rolls.reduce((a, b) => a + b, 0)
   
-  // Scale multiplier based on sum (2-12)
-  // Min sum = 2 (1+1) = 1.2x
-  // Max sum = 12 (6+6) = 3x
-  const multiplier = 1.2 + ((sum - 2) * (3 - 1.2) / (12 - 2))
-  
-  // 1% chance to win jackpot
-  const wonJackpot = Math.random() < JACKPOT_RATES.MINI_BONUS_WIN_CHANCE
+  // Scale multiplier based on sum
+  const minSum = GAME_CONFIG.MINI_BONUS.DICE_COUNT // All 1's
+  const maxSum = GAME_CONFIG.MINI_BONUS.DICE_COUNT * 6 // All 6's
+  const multiplier = GAME_CONFIG.MINI_BONUS.MIN_MULTIPLIER + 
+    ((sum - minSum) * (GAME_CONFIG.MINI_BONUS.MAX_MULTIPLIER - GAME_CONFIG.MINI_BONUS.MIN_MULTIPLIER) / (maxSum - minSum))
   
   return { 
     rolls, 
     multiplier: Number(multiplier.toFixed(2)),
-    wonJackpot
+    wonJackpot: Math.random() < JACKPOT_RATES.MINI_BONUS_WIN_CHANCE
   }
 }
 
@@ -152,18 +136,35 @@ function calculatePayout(
   // Get base multiplier
   const baseMultiplier = STANDARD_MULTIPLIERS[roll as keyof typeof STANDARD_MULTIPLIERS]
   
-  // Add streak bonus (5% per streak, max 50%)
-  const streakBonus = Math.min(currentStreak * 0.05, 0.5)
+  // Add streak bonus
+  const streakBonus = Math.min(
+    currentStreak * GAME_CONFIG.STREAK_BONUS_PER_LEVEL, 
+    GAME_CONFIG.MAX_STREAK_BONUS
+  )
   
-  // Apply risk increase (-10% per 5 streak levels)
-  const riskPenalty = Math.floor(currentStreak / 5) * 0.1
-  
-  // Calculate final multiplier
-  const finalMultiplier = Math.max(0, baseMultiplier + streakBonus - riskPenalty)
+  // Calculate final multiplier (apply streak bonus even on break-even rolls)
+  const finalMultiplier = roll === 1 ? 0 : (baseMultiplier + streakBonus)
+
+  // For break-even rolls (3 or 6), ensure we at least keep the current bank plus streak bonus
+  const effectiveMultiplier = (roll === 3 || roll === 6) ? Math.max(1 + streakBonus, finalMultiplier) : finalMultiplier
 
   // Check if bust
   const isBust = roll === 1
-  const payout = currentBank * finalMultiplier
+  
+  // Log detailed calculation steps
+  console.log('Payout calculation:', {
+    roll,
+    currentBank,
+    currentStreak,
+    baseMultiplier,
+    streakBonus,
+    finalMultiplier,
+    effectiveMultiplier,
+    rawPayout: currentBank * effectiveMultiplier,
+    fixedPayout: toFixed3(currentBank * effectiveMultiplier)
+  })
+
+  const payout = toFixed3(currentBank * effectiveMultiplier)
 
   // Calculate jackpot contribution
   const jackpotContribution = isBust 
@@ -173,7 +174,7 @@ function calculatePayout(
   return {
     payout,
     jackpotContribution,
-    multiplier: finalMultiplier,
+    multiplier: effectiveMultiplier,
     isBust,
     newStreak: isBust ? 0 : currentStreak + 1
   }

@@ -13,13 +13,6 @@ export default function GamePage() {
   const gameState = useGameState(user?.id)
   const { sessionBank, sessionStats, handleDeposit, jackpotAmount, lastJackpotContribution, recentWinners } = gameState
 
-  console.log('GamePage render:', { 
-    jackpotAmount, 
-    lastJackpotContribution,
-    currentStreak: gameState.currentStreak,
-    recentWinners
-  })
-
   const handleTopUpSession = () => {
     handleDeposit(1)
   }

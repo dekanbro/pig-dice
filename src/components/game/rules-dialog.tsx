@@ -46,7 +46,7 @@ export function RulesDialog() {
                 <span className="font-bold">Roll 1:</span> Bust (lose everything)
               </div>
               <div className="p-2 rounded bg-orange-500/10 border border-orange-500/20">
-                <span className="font-bold">Roll 2:</span> 0.2x (small loss)
+                <span className="font-bold">Roll 2:</span> 0.8x (keep 80%)
               </div>
               <div className="p-2 rounded bg-blue-500/10 border border-blue-500/20">
                 <span className="font-bold">Roll 3:</span> 0 (break even)
@@ -59,6 +59,22 @@ export function RulesDialog() {
               </div>
               <div className="p-2 rounded bg-yellow-500/10 border border-yellow-500/20">
                 <span className="font-bold">Roll 6:</span> 0 (break even)
+              </div>
+            </div>
+          </div>
+
+          {/* Streak System */}
+          <div>
+            <h3 className="font-semibold mb-2">Streak Bonus System</h3>
+            <div className="space-y-4">
+              <div className="p-3 rounded bg-green-500/10 border border-green-500/20">
+                <h4 className="font-semibold text-green-500 mb-2">🔥 Streak Multiplier</h4>
+                <ul className="list-disc pl-4 space-y-1">
+                  <li>+5% bonus multiplier per streak level</li>
+                  <li>Maximum bonus of 50% at streak level 10</li>
+                  <li>Every 5 streak levels adds 10% risk</li>
+                  <li>Bust (roll 1) resets your streak</li>
+                </ul>
               </div>
             </div>
           </div>

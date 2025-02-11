@@ -13,6 +13,7 @@ import { DebugPanel } from './debug-panel'
 import { useEffect } from 'react'
 import { toast } from '@/components/ui/use-toast'
 import { getRollDescription, getRollVariant } from '@/hooks/use-game-state'
+import { GAME_CONFIG } from '@/lib/constants'
 
 type GameBoardProps = UseGameStateReturn
 
@@ -57,8 +58,8 @@ export function GameBoard({
       })
       return
     }
-    
-    if (sessionBank < 0.01) {
+
+    if (sessionBank < GAME_CONFIG.ROLL_COST) {
       toast({
         title: "Insufficient Balance",
         description: "You need at least 0.01 PIG to start a game.",
@@ -106,7 +107,7 @@ export function GameBoard({
       console.log('Showing toast for roll:', roll)
       toast({
         title: "Roll Complete",
-        description: getRollDescription(roll),
+        description: getRollDescription(roll, (currentStreak - 1) * GAME_CONFIG.STREAK_BONUS_PER_LEVEL),
         variant: getRollVariant(roll)
       })
     }
@@ -141,7 +142,7 @@ export function GameBoard({
 
         {/* Current Bank and Streak */}
         <div className="grid grid-cols-2 gap-4 w-full max-w-xs">
-          <motion.div 
+          <motion.div
             className="text-center p-4 border rounded-lg"
             animate={{ scale: [1, 1.05, 1] }}
             transition={{ duration: 0.3 }}
@@ -151,35 +152,51 @@ export function GameBoard({
               {Number(currentBank).toFixed(3)}
             </div>
           </motion.div>
-          <motion.div 
-            className="text-center p-4 border rounded-lg"
+          <motion.div
+            className="text-center p-4 border rounded-lg relative overflow-hidden"
             animate={{ scale: [1, 1.05, 1] }}
             transition={{ duration: 0.3 }}
           >
             <div className="text-sm text-muted-foreground">Streak</div>
             <div className="text-2xl font-bold">{currentStreak}</div>
+            {currentStreak > 1 && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-xs text-green-500 font-medium"
+              >
+                +{Math.min((currentStreak - 1) * (GAME_CONFIG.STREAK_BONUS_PER_LEVEL * 100), GAME_CONFIG.MAX_STREAK_BONUS * 100)}% Bonus
+              </motion.div>
+            )}
+            {currentStreak > 0 && (
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-t from-green-500/5 to-transparent -z-10"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: Math.min(currentStreak * 0.1, 1) }}
+              />
+            )}
           </motion.div>
         </div>
 
         {/* Previous Rolls */}
         <AnimatePresence>
           {!isRolling && !bonusType && !showBust && previousRolls.length > 0 && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               className="flex gap-2 overflow-x-auto p-2 w-full max-w-xs"
             >
               {previousRolls.map((roll, index) => (
-                <motion.div 
+                <motion.div
                   key={index}
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ delay: 0.1 * index }}
                   className={`w-8 h-8 flex items-center justify-center rounded-full border
-                    ${roll === 6 ? 'bg-yellow-500 text-white' : 
+                    ${roll === 6 ? 'bg-yellow-500 text-white' :
                       roll === 3 ? 'bg-blue-500 text-white' :
-                      roll === 1 ? 'bg-red-500 text-white' : 'bg-secondary'}`}
+                        roll === 1 ? 'bg-red-500 text-white' : 'bg-secondary'}`}
                 >
                   {roll}
                 </motion.div>
@@ -215,16 +232,16 @@ export function GameBoard({
       </CardContent>
       <CardFooter className="flex justify-center gap-4">
         {!gameStarted ? (
-          <Button 
+          <Button
             size="lg"
             onClick={onStartGame}
-            disabled={isRolling || !user?.id || sessionBank < 0.01}
+            disabled={isRolling || !user?.id || sessionBank < GAME_CONFIG.ROLL_COST}
           >
-            Start Game (0.01 PIG)
+            Start Game ({GAME_CONFIG.ROLL_COST} PIG)
           </Button>
         ) : (
           <>
-            <Button 
+            <Button
               size="lg"
               variant="outline"
               onClick={onCashout}
@@ -232,12 +249,12 @@ export function GameBoard({
             >
               Cash Out
             </Button>
-            <Button 
+            <Button
               size="lg"
               onClick={() => handleRoll()}
-              disabled={isRolling || !user?.id || sessionBank < 0.01}
+              disabled={isRolling || !user?.id || sessionBank < GAME_CONFIG.ROLL_COST}
             >
-              {isRolling ? 'Rolling...' : 'Roll Again'}
+              {isRolling ? 'Rolling...' : `Roll Again (${GAME_CONFIG.ROLL_COST} PIG)`}
             </Button>
           </>
         )}
