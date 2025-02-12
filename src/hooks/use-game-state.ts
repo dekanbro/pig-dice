@@ -1,12 +1,17 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { toast } from '@/components/ui/use-toast'
-import { getCookie } from 'cookies-next'
 import { STANDARD_MULTIPLIERS, GAME_CONFIG } from '@/lib/constants'
+import { saveGameState, loadGameState, subscribeToGameState, handleGameRoll } from '@/lib/game-service'
+import { useEffect } from 'react'
 
 // Convert number to fixed precision (3 decimals) to avoid floating point issues
-function toFixed3(num: number): number {
-  return Number(num.toFixed(3))
+function toFixed3(num: number | undefined | null): number {
+  if (num === undefined || num === null) {
+    console.warn('toFixed3 called with undefined/null value, using 0')
+    return 0
+  }
+  return Number(Number(num).toFixed(3))
 }
 
 // Helper function to get roll description
@@ -151,9 +156,15 @@ export const useGameStore = create<GameState & GameActions>()(
           lastBonusCooldown: { ...state.lastBonusCooldown, ...cooldown }
         })),
       setJackpotAmount: (amount) => {
+        // Handle undefined/null amount
+        if (amount === undefined || amount === null) {
+          console.warn('setJackpotAmount called with undefined/null amount, using 0')
+          amount = 0
+        }
+
         // Get raw values first
-        const rawNewAmount = Number(amount.toFixed(10))
-        const rawOldAmount = Number(get().jackpotAmount.toFixed(10))
+        const rawNewAmount = Number(Number(amount).toFixed(10))
+        const rawOldAmount = Number((get().jackpotAmount || 0).toFixed(10))
         const rawContribution = Number((rawNewAmount - rawOldAmount).toFixed(10))
         
         // Then apply fixed precision for display
@@ -245,25 +256,139 @@ export type UseGameStateReturn = GameState & {
 export function useGameState(userId?: string): UseGameStateReturn {
   const state = useGameStore()
   
+  // Load initial state from Supabase
+  useEffect(() => {
+    if (!userId) return
+
+    let unsubscribe: (() => void) | undefined
+
+    const loadState = async () => {
+      try {
+        const savedState = await loadGameState(userId)
+        if (savedState) {
+          // Update local state with saved state
+          state.setJackpotAmount(savedState.jackpotAmount)
+          state.setSessionStats(savedState.sessionStats)
+          state.setSessionBank(savedState.sessionBank)
+          state.setCurrentStreak(savedState.currentStreak)
+          state.setCurrentBank(savedState.currentBank)
+          state.setGameStarted(savedState.gameStarted)
+          state.setPreviousRolls(savedState.previousRolls)
+          state.setBonusType(savedState.bonusType)
+          state.setBonusRolls(savedState.bonusRolls)
+          
+          // Subscribe to real-time updates
+          unsubscribe = await subscribeToGameState(userId, (newState) => {
+            if (newState.jackpotAmount !== undefined) state.setJackpotAmount(newState.jackpotAmount)
+            if (newState.sessionStats) state.setSessionStats(newState.sessionStats)
+            if (newState.sessionBank !== undefined) state.setSessionBank(newState.sessionBank)
+            if (newState.currentStreak !== undefined) state.setCurrentStreak(newState.currentStreak)
+            if (newState.currentBank !== undefined) state.setCurrentBank(newState.currentBank)
+            if (newState.gameStarted !== undefined) state.setGameStarted(newState.gameStarted)
+            if (newState.previousRolls) state.setPreviousRolls(newState.previousRolls)
+            if (newState.bonusType !== undefined) state.setBonusType(newState.bonusType)
+            if (newState.bonusRolls) state.setBonusRolls(newState.bonusRolls)
+          })
+        }
+      } catch (error) {
+        console.error('Error loading game state:', error)
+      }
+    }
+
+    loadState()
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe()
+      }
+    }
+  }, [userId])
+
+  // Save state to Supabase whenever it changes
+  useEffect(() => {
+    if (!userId) return
+
+    const saveState = async () => {
+      try {
+        await saveGameState({
+          jackpotAmount: state.jackpotAmount,
+          sessionStats: state.sessionStats,
+          sessionBank: state.sessionBank,
+          recentWinners: state.recentWinners,
+          currentStreak: state.currentStreak,
+          currentBank: state.currentBank,
+          gameStarted: state.gameStarted,
+          previousRolls: state.previousRolls,
+          bonusType: state.bonusType,
+          bonusRolls: state.bonusRolls
+        }, userId)
+      } catch (error) {
+        console.error('Error saving game state:', error)
+      }
+    }
+
+    saveState()
+  }, [
+    userId,
+    state.jackpotAmount,
+    state.sessionStats,
+    state.sessionBank,
+    state.recentWinners,
+    state.currentStreak,
+    state.currentBank,
+    state.gameStarted,
+    state.previousRolls,
+    state.bonusType,
+    state.bonusRolls
+  ])
+
   async function handleStartGame() {
     if (!userId || state.sessionBank < GAME_CONFIG.ROLL_COST) return
     
+    console.log('Starting new game:', {
+      sessionBank: state.sessionBank,
+      rollCost: GAME_CONFIG.ROLL_COST
+    })
+    
     // Reset all game state
-    state.setGameStarted(true)
-    state.setSessionBank(state.sessionBank - GAME_CONFIG.ROLL_COST)
-    state.setCurrentBank(GAME_CONFIG.ROLL_COST)
+    const initialBank = GAME_CONFIG.ROLL_COST
+    const newSessionBank = state.sessionBank - initialBank
+
+    // Set initial state synchronously to ensure correct values
+    state.setCurrentBank(initialBank)
+    state.setSessionBank(newSessionBank)
     state.setCurrentStreak(0)
     state.setPreviousRolls([])
     state.setCurrentRoll([])
     state.setBonusType(null)
     state.setBonusRolls([])
     state.setShowBust(false)
-    state.setRolling(true)  // Start rolling animation
+    state.setGameStarted(true)
+    state.setRolling(true)
+    
+    console.log('Game state after reset:', {
+      gameStarted: true,
+      sessionBank: newSessionBank,
+      currentBank: initialBank,
+      currentStreak: 0
+    })
     
     state.setSessionStats({
       totalGames: state.sessionStats.totalGames + 1
     })
 
+    // Wait a moment for state to settle before first roll
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    // Get current state before rolling
+    const currentState = {
+      currentBank: state.currentBank,
+      sessionBank: state.sessionBank,
+      currentStreak: state.currentStreak,
+      previousRolls: state.previousRolls
+    }
+    console.log('State before first roll:', currentState)
+    
     // Automatically trigger first roll
     await handleRoll()
   }
@@ -285,71 +410,46 @@ export function useGameState(userId?: string): UseGameStateReturn {
       return
     }
 
-    const token = getCookie('privy-token')
-    if (!token) {
-      toast({
-        title: "Authentication Error",
-        description: "Please reconnect your wallet.",
-        variant: "destructive"
-      })
-      return
-    }
-
     try {
-      state.setRolling(true)
-      state.setSessionBank(state.sessionBank - GAME_CONFIG.ROLL_COST)
-
-      // Get initial jackpot amount
-      const initialJackpot = state.jackpotAmount
-      
-      const response = await fetch('/api/game/roll', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          betAmount: GAME_CONFIG.ROLL_COST,
-          currentBank: state.currentBank,
-          currentStreak: state.currentStreak,
-          previousRolls: state.previousRolls,
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || 'Roll failed')
+      // Get current state values
+      const currentState = {
+        currentBank: state.currentBank || GAME_CONFIG.ROLL_COST, // Ensure we have a valid bank amount
+        sessionBank: state.sessionBank,
+        currentStreak: state.currentStreak,
+        previousRolls: state.previousRolls
       }
 
-      const { data } = await response.json()
-      const {
-        roll,
-        payout,
-        bonusType: newBonusType,
-        bonusRolls: newBonusRolls,
-        isBust,
-        newStreak,
-        jackpotContribution,
-        multiplier
-      } = data
+      console.log('Starting handleRoll:', currentState)
 
-      // Update game state
-      state.setCurrentRoll([roll])
-      state.setCurrentStreak(newStreak)
-      
-      // Log the actual multiplier and payout details
-      console.log('Roll result:', {
-        roll,
-        baseMultiplier: STANDARD_MULTIPLIERS[roll as keyof typeof STANDARD_MULTIPLIERS],
-        finalMultiplier: multiplier,
-        currentBank: state.currentBank,
-        payout,
-        currentStreak: state.currentStreak,
-        newStreak
+      state.setRolling(true)
+      state.setSessionBank(currentState.sessionBank - GAME_CONFIG.ROLL_COST)
+
+      const result = await handleGameRoll(
+        currentState.currentBank,
+        currentState.currentStreak,
+        currentState.previousRolls
+      )
+
+      console.log('Roll result from server:', {
+        roll: result.roll,
+        payout: result.payout,
+        multiplier: result.multiplier,
+        isBust: result.isBust,
+        newStreak: result.newStreak,
+        currentBank: currentState.currentBank,
+        sentBank: currentState.currentBank
       })
 
+      // Update game state with roll result
+      state.setCurrentRoll([result.roll])
+      state.setCurrentStreak(result.newStreak)
+
       // Handle different roll outcomes
-      if (isBust) {
+      if (result.isBust) {
+        console.log('Handling bust:', {
+          currentBank: currentState.currentBank,
+          newBank: 0
+        })
         // Handle bust
         state.setCurrentBank(0)
         state.setShowBust(true)
@@ -359,48 +459,32 @@ export function useGameState(userId?: string): UseGameStateReturn {
       } else {
         // Handle all non-bust cases
         console.log('Setting new bank amount:', {
-          currentBank: state.currentBank,
-          payout,
-          roll,
-          multiplier,
-          streak: state.currentStreak
+          currentBank: currentState.currentBank,
+          newBank: result.payout,
+          roll: result.roll,
+          multiplier: result.multiplier,
+          streak: currentState.currentStreak
         })
-        state.setCurrentBank(toFixed3(payout))  // Ensure we use toFixed3 here
-        state.setPreviousRolls([...state.previousRolls, roll])
+        state.setCurrentBank(result.payout)  // Use the payout from the server
+        state.setPreviousRolls([...currentState.previousRolls, result.roll])
       }
 
-      // Update jackpot in a single place
-      // Always add roll cost first
-      const newJackpot = initialJackpot + GAME_CONFIG.ROLL_COST
-      
-      // Then add any additional contribution
-      const finalJackpot = jackpotContribution > 0 
-        ? newJackpot + jackpotContribution
-        : newJackpot
-
-      console.log('Jackpot update:', {
-        initialJackpot,
-        rollCost: GAME_CONFIG.ROLL_COST,
-        newJackpot,
-        jackpotContribution,
-        finalJackpot
-      })
-
-      state.setJackpotAmount(finalJackpot)
+      // Update jackpot
+      state.setJackpotAmount(result.newJackpot)
 
       // Handle bonus rounds
-      if (newBonusType) {
-        state.setBonusType(newBonusType)
-        state.setBonusRolls(newBonusRolls || [])
+      if (result.bonusType) {
+        state.setBonusType(result.bonusType)
+        state.setBonusRolls(result.bonusRolls || [])
       }
 
-      // Update session stats
-      const isWin = multiplier > 1
-      state.setSessionStats({
-        totalGames: state.sessionStats.totalGames + 1,
-        wins: isWin ? state.sessionStats.wins + 1 : state.sessionStats.wins,
-        highestWin: Math.max(state.sessionStats.highestWin, payout),
-        winRate: (state.sessionStats.wins / (state.sessionStats.totalGames + 1)) * 100,
+      console.log('End of handleRoll:', {
+        currentBank: state.currentBank,
+        sessionBank: state.sessionBank,
+        currentStreak: state.currentStreak,
+        previousRolls: state.previousRolls,
+        isRolling: state.isRolling,
+        sentBank: currentState.currentBank
       })
 
     } catch (error) {

@@ -7,6 +7,7 @@ import { JackpotDisplay } from '@/components/game/jackpot-display'
 import { AuthCheck } from '@/components/auth/auth-check'
 import { useGameState } from '@/hooks/use-game-state'
 import { usePrivy } from '@privy-io/react-auth'
+import { JACKPOT_RATES } from '@/lib/constants'
 
 export default function GamePage() {
   const { user } = usePrivy()
@@ -43,7 +44,7 @@ export default function GamePage() {
           <Suspense fallback={<div className="animate-pulse h-[300px] bg-muted rounded-lg" />}>
             <JackpotDisplay
               jackpot={{
-                amount: jackpotAmount.toFixed(3) + ' PIG',
+                amount: (jackpotAmount ?? JACKPOT_RATES.INITIAL_AMOUNT).toFixed(3) + ' PIG',
                 lastContribution: lastJackpotContribution,
                 recentWinners
               }}
