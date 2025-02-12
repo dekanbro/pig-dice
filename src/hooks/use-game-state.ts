@@ -197,12 +197,18 @@ export const useGameStore = create<GameState & GameActions>()(
     {
       name: 'game-storage',
       partialize: (state) => {
-        // Don't round the jackpot amount in persistence
         const partialState = {
           jackpotAmount: state.jackpotAmount,
           sessionStats: state.sessionStats,
           sessionBank: toFixed3(state.sessionBank),
-          recentWinners: state.recentWinners
+          recentWinners: state.recentWinners,
+          // Add game state persistence
+          currentStreak: state.currentStreak,
+          currentBank: toFixed3(state.currentBank),
+          gameStarted: state.gameStarted,
+          previousRolls: state.previousRolls,
+          bonusType: state.bonusType,
+          bonusRolls: state.bonusRolls
         }
         console.log('Persisting state:', partialState)
         return partialState
@@ -211,7 +217,11 @@ export const useGameStore = create<GameState & GameActions>()(
         console.log('Rehydrated state:', { 
           jackpotAmount: state?.jackpotAmount,
           lastJackpotContribution: state?.lastJackpotContribution,
-          recentWinners: state?.recentWinners
+          recentWinners: state?.recentWinners,
+          currentStreak: state?.currentStreak,
+          currentBank: state?.currentBank,
+          gameStarted: state?.gameStarted,
+          previousRolls: state?.previousRolls
         })
       }
     }
