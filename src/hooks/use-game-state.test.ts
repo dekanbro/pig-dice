@@ -124,6 +124,17 @@ describe('useGameState - Jackpot Functionality', () => {
       await result.current.handleRoll()
     })
 
+    // Simulate subscription update
+    await act(async () => {
+      const callback = (global as { mockSubscriptionCallback?: SubscriptionCallback }).mockSubscriptionCallback
+      if (callback) {
+        callback({
+          jackpotAmount: newJackpot,
+          jackpotWon: false
+        })
+      }
+    })
+
     expect(result.current.jackpotAmount).toBe(newJackpot)
     expect(result.current.jackpotWon).toBe(false)
   })
@@ -149,6 +160,17 @@ describe('useGameState - Jackpot Functionality', () => {
     await act(async () => {
       await result.current.handleStartGame()
       await result.current.handleRoll()
+    })
+
+    // Simulate subscription update for jackpot win
+    await act(async () => {
+      const callback = (global as { mockSubscriptionCallback?: SubscriptionCallback }).mockSubscriptionCallback
+      if (callback) {
+        callback({
+          jackpotAmount: 0,
+          jackpotWon: true
+        })
+      }
     })
 
     expect(result.current.jackpotAmount).toBe(0)
@@ -205,12 +227,34 @@ describe('useGameState - Jackpot Functionality', () => {
       await result.current.handleRoll()
     })
 
+    // Simulate subscription update for jackpot win
+    await act(async () => {
+      const callback = (global as { mockSubscriptionCallback?: SubscriptionCallback }).mockSubscriptionCallback
+      if (callback) {
+        callback({
+          jackpotAmount: 0,
+          jackpotWon: true
+        })
+      }
+    })
+
     expect(result.current.jackpotAmount).toBe(0)
     expect(result.current.jackpotWon).toBe(true)
 
     // Continue rolling
     await act(async () => {
       await result.current.handleRoll()
+    })
+
+    // Simulate subscription update for new jackpot
+    await act(async () => {
+      const callback = (global as { mockSubscriptionCallback?: SubscriptionCallback }).mockSubscriptionCallback
+      if (callback) {
+        callback({
+          jackpotAmount: 0.01,
+          jackpotWon: false
+        })
+      }
     })
 
     expect(mockRpc).toHaveBeenCalledWith('reset_jackpot_won')
@@ -265,6 +309,17 @@ describe('useGameState - Jackpot Functionality', () => {
     // Start new game
     await act(async () => {
       await result.current.handleStartGame()
+    })
+
+    // Simulate subscription update for reset jackpot
+    await act(async () => {
+      const callback = (global as { mockSubscriptionCallback?: SubscriptionCallback }).mockSubscriptionCallback
+      if (callback) {
+        callback({
+          jackpotAmount: GAME_CONFIG.INITIAL_JACKPOT,
+          jackpotWon: false
+        })
+      }
     })
 
     expect(mockRpc).toHaveBeenCalledWith('reset_jackpot_won')

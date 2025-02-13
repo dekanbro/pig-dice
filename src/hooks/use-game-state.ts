@@ -263,7 +263,7 @@ export type UseGameStateReturn = GameState & {
 export function useGameState(userId?: string): UseGameStateReturn {
   const state = useGameStore()
   
-  // Load initial state from Supabase
+  // Load initial state and subscribe to updates
   useEffect(() => {
     if (!userId) return
 
@@ -283,6 +283,7 @@ export function useGameState(userId?: string): UseGameStateReturn {
           state.setPreviousRolls(savedState.previousRolls)
           state.setBonusType(savedState.bonusType)
           state.setBonusRolls(savedState.bonusRolls)
+          state.setJackpotWon(savedState.jackpotWon)
           
           // Subscribe to real-time updates
           unsubscribe = await subscribeToGameState(userId, (newState) => {
@@ -325,7 +326,7 @@ export function useGameState(userId?: string): UseGameStateReturn {
         unsubscribe()
       }
     }
-  }, [userId])
+  }, [userId, state])
 
   // Save state to Supabase whenever it changes
   useEffect(() => {
@@ -363,7 +364,8 @@ export function useGameState(userId?: string): UseGameStateReturn {
     state.gameStarted,
     state.previousRolls,
     state.bonusType,
-    state.bonusRolls
+    state.bonusRolls,
+    state.jackpotWon
   ])
 
   async function handleStartGame() {
