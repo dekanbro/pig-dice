@@ -26,6 +26,7 @@ export type GameState = {
   previousRolls: number[]
   bonusType: 'MEGA_BONUS' | 'MINI_BONUS' | null
   bonusRolls: number[]
+  jackpotWon: boolean
 }
 
 export interface Database {

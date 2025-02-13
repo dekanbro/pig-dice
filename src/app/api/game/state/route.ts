@@ -76,11 +76,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('POST /api/game/state - Starting request')
-    
     const authResult = await verifyAuthToken(request)
-    console.log('Auth result:', { isAuthenticated: authResult.isAuthenticated, userId: authResult.userId })
-    
     if (!authResult.isAuthenticated || !authResult.userId) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
@@ -88,48 +84,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const body = await request.json()
-    const { gameState } = body
+    const userId = authResult.userId
+    const { gameState } = await request.json()
 
-    // First try to update
-    const { data, error: updateError } = await supabase
+    // Save game state
+    const { error } = await supabase
       .from('game_data')
-      .update({ 
-        game_state: gameState,
-        updated_at: new Date().toISOString()
+      .upsert({
+        user_id: userId,
+        game_state: gameState
       })
-      .eq('user_id', authResult.userId)
-      .select()
 
-    if (updateError) {
-      console.error('Update error:', updateError)
-      throw updateError
-    }
-
-    // If no record exists, create new one
-    if (!data || data.length === 0) {
-      console.log('No existing record, creating new one')
-      const { error: insertError } = await supabase
-        .from('game_data')
-        .insert({
-          user_id: authResult.userId,
-          game_state: gameState,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-
-      if (insertError) {
-        console.error('Insert error:', insertError)
-        throw insertError
-      }
+    if (error) {
+      console.error('Error saving game state:', error)
+      throw error
     }
 
     console.log('Successfully saved game state')
     return NextResponse.json({ success: true })
+
   } catch (error) {
-    console.error('Detailed error in POST /api/game/state:', error)
+    console.error('Error in POST /api/game/state:', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Failed to save game state" },
+      { success: false, error: 'Failed to save game state' },
       { status: 500 }
     )
   }

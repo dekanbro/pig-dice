@@ -1,11 +1,11 @@
 import { createClient } from '@/lib/supabase/client'
 import type { GameState } from '@/types/supabase'
-import { JACKPOT_RATES } from '@/lib/constants'
 import { getCookie } from 'cookies-next'
 
 interface JackpotData {
   amount: number
   last_updated: string
+  jackpot_won: boolean
 }
 
 interface GameStateResponse {
@@ -22,6 +22,7 @@ interface RollResult {
   jackpotContribution: number
   multiplier: number
   newJackpot: number
+  jackpotWon: boolean
 }
 
 export async function handleGameRoll(
@@ -50,8 +51,8 @@ export async function handleGameRoll(
     throw new Error(error.message || 'Failed to process roll')
   }
 
-  const { data } = await response.json()
-  return data as RollResult
+  const result = await response.json()
+  return result as RollResult
 }
 
 export async function saveGameState(state: GameState, userId?: string): Promise<void> {
@@ -149,7 +150,26 @@ export async function subscribeToGameState(
       table: 'jackpot'
     }, (payload) => {
       const jackpotData = payload.new as unknown as JackpotData
-      onUpdate({ jackpotAmount: jackpotData?.amount ?? JACKPOT_RATES.INITIAL_AMOUNT })
+      const oldData = payload.old as unknown as JackpotData
+      
+      console.log('Received jackpot update:', {
+        event: payload.eventType,
+        oldData: {
+          amount: oldData?.amount,
+          jackpot_won: oldData?.jackpot_won
+        },
+        newData: {
+          amount: jackpotData?.amount,
+          jackpot_won: jackpotData?.jackpot_won
+        },
+        timestamp: new Date().toISOString()
+      })
+
+      // Force a UI update by always sending both values
+      onUpdate({ 
+        jackpotAmount: jackpotData?.amount ?? 0,
+        jackpotWon: jackpotData?.jackpot_won ?? false
+      })
     })
     .subscribe()
     

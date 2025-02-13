@@ -10,12 +10,18 @@ import type { UseGameStateReturn } from '@/hooks/use-game-state'
 import { BonusPanel } from './bonus-panel'
 import { BustEffect } from './animations/rain'
 import { DebugPanel } from './debug-panel'
-import { useEffect } from 'react'
+import { JackpotPanel } from './jackpot-panel'
+import { useEffect, useState } from 'react'
 import { toast } from '@/components/ui/use-toast'
 import { getRollDescription, getRollVariant } from '@/hooks/use-game-state'
 import { GAME_CONFIG } from '@/lib/constants'
 
-type GameBoardProps = UseGameStateReturn
+type GameBoardProps = UseGameStateReturn & {
+  onTriggerJackpot?: () => void
+  onClearWallet?: () => void
+  jackpotAmount?: number
+  setJackpotAmount?: (amount: number) => void
+}
 
 export function GameBoard({
   isRolling,
@@ -38,8 +44,14 @@ export function GameBoard({
   simulateMegaBonus,
   simulateMiniBonusBonus,
   handleDeposit,
+  onTriggerJackpot,
+  onClearWallet,
+  jackpotAmount,
+  setJackpotAmount,
 }: GameBoardProps) {
   const { user } = usePrivy()
+  const [showJackpot, setShowJackpot] = useState(false)
+  const [jackpotWinAmount, setJackpotWinAmount] = useState(0)
 
   // Add effect to auto-roll when game starts
   useEffect(() => {
@@ -113,6 +125,31 @@ export function GameBoard({
     }
   }
 
+  // Handle jackpot win
+  const handleJackpotTrigger = () => {
+    if (onTriggerJackpot) {
+      setJackpotWinAmount(jackpotAmount || 0)
+      setShowJackpot(true)
+      onTriggerJackpot()
+    }
+  }
+
+  const handleJackpotDismiss = () => {
+    setShowJackpot(false)
+  }
+
+  // Handle adding to jackpot
+  const handleAddToJackpot = () => {
+    if (setJackpotAmount && jackpotAmount !== undefined) {
+      setJackpotAmount(jackpotAmount + 1)
+      toast({
+        title: "💎 Jackpot Increased",
+        description: `Added 1 PIG to jackpot. New total: ${(jackpotAmount + 1).toFixed(3)} PIG`,
+        variant: "default"
+      })
+    }
+  }
+
   return (
     <Card className="w-full relative">
       <RulesDialog />
@@ -128,6 +165,16 @@ export function GameBoard({
               rolls={bonusRolls}
               currentBank={currentBank}
               onDismiss={handleBonusDismiss}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Jackpot Animation */}
+        <AnimatePresence>
+          {showJackpot && !isRolling && (
+            <JackpotPanel
+              amount={jackpotWinAmount}
+              onDismiss={handleJackpotDismiss}
             />
           )}
         </AnimatePresence>
@@ -210,6 +257,9 @@ export function GameBoard({
           onTriggerMegaBonus={simulateMegaBonus}
           onTriggerMiniBonus={simulateMiniBonusBonus}
           onTriggerBust={handleBust}
+          onTriggerJackpot={handleJackpotTrigger}
+          onClearWallet={onClearWallet || (() => {})}
+          onAddToJackpot={handleAddToJackpot}
           setCurrentBank={handleBust}
           currentBank={currentBank}
           onTopUpSession={handleDebugTopUp}

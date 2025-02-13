@@ -73,7 +73,7 @@ export function FireworkBurst({ color, x, y, burstId }: FireworkBurstProps) {
 }
 
 interface FireworksEffectProps {
-  type: 'MEGA_BONUS' | 'MINI_BONUS'
+  type: 'MEGA_BONUS' | 'MINI_BONUS' | 'JACKPOT'
 }
 
 export function FireworksEffect({ type }: FireworksEffectProps) {
@@ -96,55 +96,78 @@ export function FireworksEffect({ type }: FireworksEffectProps) {
     const interval = setInterval(() => {
       const newParticle = {
         id: getUniqueId(),
-        x: (Math.random() - 0.5) * 600,
-        y: (Math.random() - 0.5) * 400
+        x: (Math.random() - 0.5) * (type === 'JACKPOT' ? 800 : 600),
+        y: (Math.random() - 0.5) * (type === 'JACKPOT' ? 600 : 400)
       }
       setParticles(prev => [...prev, newParticle])
       
-      // Occasionally add bursts
-      if (Math.random() < 0.3) {
+      // Increase burst frequency for jackpot
+      if (Math.random() < (type === 'JACKPOT' ? 0.5 : 0.3)) {
         setBursts(prev => [...prev, { 
           id: getUniqueId(), 
-          x: (Math.random() - 0.5) * 400,
-          y: (Math.random() - 0.5) * 300
+          x: (Math.random() - 0.5) * (type === 'JACKPOT' ? 600 : 400),
+          y: (Math.random() - 0.5) * (type === 'JACKPOT' ? 500 : 300)
         }])
       }
 
-      // Cleanup old particles
-      setParticles(prev => prev.slice(-30))
-      setBursts(prev => prev.slice(-3))
-    }, 100)
+      // Keep more particles for jackpot
+      setParticles(prev => prev.slice(-(type === 'JACKPOT' ? 50 : 30)))
+      setBursts(prev => prev.slice(-(type === 'JACKPOT' ? 5 : 3)))
+    }, type === 'JACKPOT' ? 50 : 100)
 
     return () => {
       clearInterval(interval)
       // Reset particle ID counter on cleanup
       particleId = 0
     }
-  }, [])
+  }, [type])
 
-  const baseColor = type === 'MEGA_BONUS' ? 'bg-yellow-500' : 'bg-blue-500'
-  const altColor = type === 'MEGA_BONUS' ? 'bg-yellow-300' : 'bg-blue-300'
+  let baseColor = 'bg-yellow-500'
+  let altColor = 'bg-yellow-300'
+  let extraColors: string[] = []
+
+  if (type === 'MINI_BONUS') {
+    baseColor = 'bg-blue-500'
+    altColor = 'bg-blue-300'
+  } else if (type === 'JACKPOT') {
+    baseColor = 'bg-purple-500'
+    altColor = 'bg-purple-300'
+    extraColors = [
+      'bg-pink-500',
+      'bg-indigo-500',
+      'bg-emerald-500',
+      'bg-amber-500',
+      'bg-rose-500'
+    ]
+  }
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
       <div className="absolute inset-0 flex items-center justify-center">
         <AnimatePresence>
           {/* Regular fireworks */}
-          {particles.map((particle) => (
-            <Firework 
-              key={`particle-${particle.id}`}
-              color={Math.random() > 0.5 ? baseColor : altColor}
-              size={Math.random() > 0.7 ? 'large' : Math.random() > 0.5 ? 'medium' : 'small'}
-              initialX={particle.x}
-              initialY={particle.y}
-            />
-          ))}
+          {particles.map((particle) => {
+            const colors = type === 'JACKPOT' 
+              ? [baseColor, altColor, ...extraColors]
+              : [baseColor, altColor]
+            const randomColor = colors[Math.floor(Math.random() * colors.length)]
+            
+            return (
+              <Firework 
+                key={`particle-${particle.id}`}
+                color={randomColor}
+                size={Math.random() > (type === 'JACKPOT' ? 0.5 : 0.7) ? 'large' : Math.random() > 0.5 ? 'medium' : 'small'}
+                initialX={particle.x}
+                initialY={particle.y}
+              />
+            )
+          })}
           {/* Bursts */}
           {bursts.map((burst) => (
             <FireworkBurst 
               key={`burst-${burst.id}`}
               burstId={burst.id}
-              color={baseColor}
+              color={type === 'JACKPOT' ? extraColors[Math.floor(Math.random() * extraColors.length)] : baseColor}
               x={burst.x}
               y={burst.y}
             />

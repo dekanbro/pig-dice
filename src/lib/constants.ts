@@ -10,7 +10,7 @@ export const STANDARD_MULTIPLIERS = {
 export const JACKPOT_RATES = {
   ROLL_CONTRIBUTION: 0.02,    // 2% of winnings go to jackpot
   BUST_CONTRIBUTION: 1.0,     // 100% of bust amount goes to jackpot
-  INITIAL_AMOUNT: 5.5         // Starting jackpot amount
+  INITIAL_AMOUNT: 0          // Starting jackpot amount
 } as const
 
 export const GAME_CONFIG = {
@@ -22,7 +22,7 @@ export const GAME_CONFIG = {
   ROLL_COST: 0.01,               // $0.01 per roll
   
   // Game settings
-  INITIAL_JACKPOT: 5.5,          // Starting jackpot amount
+  INITIAL_JACKPOT: 0,          // Starting jackpot amount
   SIGNIFICANT_WIN: 1.0,          // Threshold for recording in recent winners
   
   // Bonus round settings

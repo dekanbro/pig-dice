@@ -65,11 +65,55 @@ export async function POST(request: NextRequest) {
       ? currentBank * JACKPOT_RATES.BUST_CONTRIBUTION  // 100% on bust
       : payout * JACKPOT_RATES.ROLL_CONTRIBUTION      // 2% of winnings
 
+    // Add roll cost to contribution (except for first roll of streak)
+    const rollCostContribution = currentStreak > 0 ? GAME_CONFIG.ROLL_COST : 0
+
+    console.log('Calculating jackpot contribution:', {
+      currentBank,
+      payout,
+      isBust,
+      currentStreak,
+      baseContribution: jackpotContribution,
+      rollCostContribution,
+      totalContribution: jackpotContribution + rollCostContribution
+    })
+
     // Update jackpot atomically using the update_jackpot function
     const supabase = createServerClient()
-    const { data: newJackpot, error: jackpotError } = await supabase
+
+    // Get current jackpot amount first
+    const { data: currentJackpot, error: getError } = await supabase
+      .from('jackpot')
+      .select('amount, jackpot_won')
+      .single()
+
+    if (getError) {
+      console.error('Error getting current jackpot:', getError)
+      return NextResponse.json(
+        { error: 'Failed to get current jackpot' },
+        { status: 500 }
+      )
+    }
+
+    // Reset jackpot won state if needed
+    if (currentJackpot.jackpot_won) {
+      const { error: resetError } = await supabase
+        .rpc('reset_jackpot_won')
+      
+      if (resetError) {
+        console.error('Error resetting jackpot won state:', resetError)
+        return NextResponse.json(
+          { error: 'Failed to reset jackpot won state' },
+          { status: 500 }
+        )
+      }
+      console.log('Reset jackpot won state before new contribution')
+    }
+
+    // Update jackpot
+    const { data: jackpotData, error: jackpotError } = await supabase
       .rpc('update_jackpot', { 
-        contribution: jackpotContribution + GAME_CONFIG.ROLL_COST 
+        contribution: jackpotContribution + rollCostContribution
       })
 
     if (jackpotError) {
@@ -79,6 +123,17 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Extract jackpot info from response
+    const newJackpot = jackpotData.amount
+    const jackpotWon = jackpotData.jackpot_won
+
+    console.log('Jackpot updated:', {
+      oldAmount: currentJackpot.amount,
+      newAmount: newJackpot,
+      contribution: jackpotContribution + rollCostContribution,
+      isWon: jackpotWon
+    })
 
     // Check for bonus rounds
     let bonusType = null
@@ -119,21 +174,22 @@ export async function POST(request: NextRequest) {
       newStreak,
       jackpotContribution,
       multiplier: effectiveMultiplier,
-      newJackpot
+      newJackpot,
+      jackpotWon
     })
 
+    // Return roll result
     return NextResponse.json({
-      data: {
-        roll,
-        payout,
-        bonusType,
-        bonusRolls,
-        isBust,
-        newStreak,
-        jackpotContribution,
-        multiplier: effectiveMultiplier,
-        newJackpot
-      }
+      roll,
+      payout,
+      bonusType,
+      bonusRolls,
+      isBust,
+      newStreak,
+      jackpotContribution,
+      multiplier: effectiveMultiplier,
+      newJackpot,
+      jackpotWon
     })
 
   } catch (error) {

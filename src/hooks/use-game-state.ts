@@ -4,6 +4,7 @@ import { toast } from '@/components/ui/use-toast'
 import { STANDARD_MULTIPLIERS, GAME_CONFIG } from '@/lib/constants'
 import { saveGameState, loadGameState, subscribeToGameState, handleGameRoll } from '@/lib/game-service'
 import { useEffect } from 'react'
+import { createClient } from '@supabase/supabase-js'
 
 // Convert number to fixed precision (3 decimals) to avoid floating point issues
 function toFixed3(num: number | undefined | null): number {
@@ -86,6 +87,7 @@ interface GameState {
     amount: string
     timestamp: string
   }>
+  jackpotWon: boolean
 }
 
 interface GameActions {
@@ -103,6 +105,7 @@ interface GameActions {
   setLastBonusCooldown: (cooldown: Partial<GameState['lastBonusCooldown']>) => void
   setJackpotAmount: (amount: number) => void
   setLastJackpotContribution: (amount: number | null) => void
+  setJackpotWon: (won: boolean) => void
   addRecentWinner: (winner: { address: string, amount: string }) => void
   reset: () => void
 }
@@ -130,7 +133,8 @@ const initialState: GameState = {
   },
   jackpotAmount: GAME_CONFIG.INITIAL_JACKPOT,
   lastJackpotContribution: null,
-  recentWinners: []
+  recentWinners: [],
+  jackpotWon: false
 }
 
 export const useGameStore = create<GameState & GameActions>()(
@@ -172,16 +176,14 @@ export const useGameStore = create<GameState & GameActions>()(
         const fixedOldAmount = toFixed3(rawOldAmount)
         const fixedContribution = toFixed3(rawContribution)
         
-        console.log('Setting jackpot amount (detailed):', { 
-          rawOldAmount,
-          rawNewAmount,
-          rawContribution,
-          fixedOldAmount,
-          fixedAmount,
-          fixedContribution,
-          beforeRounding: {
-            sum: Number((rawOldAmount + GAME_CONFIG.ROLL_COST).toFixed(10)),
-            difference: Number((rawOldAmount + GAME_CONFIG.ROLL_COST - rawOldAmount).toFixed(10))
+        console.log('Setting jackpot amount:', { 
+          oldAmount: fixedOldAmount,
+          newAmount: fixedAmount,
+          contribution: fixedContribution,
+          rawValues: {
+            oldAmount: rawOldAmount,
+            newAmount: rawNewAmount,
+            contribution: rawContribution
           }
         })
 
@@ -194,6 +196,7 @@ export const useGameStore = create<GameState & GameActions>()(
       setLastJackpotContribution: (amount) => set({ 
         lastJackpotContribution: amount !== null ? toFixed3(amount) : null 
       }),
+      setJackpotWon: (won) => set({ jackpotWon: won }),
       addRecentWinner: (winner) => set((state) => ({
         recentWinners: [
           {
@@ -209,7 +212,8 @@ export const useGameStore = create<GameState & GameActions>()(
       name: 'game-storage',
       partialize: (state) => {
         const partialState = {
-          jackpotAmount: state.jackpotAmount,
+          jackpotAmount: state.jackpotAmount || 0, // Ensure we never persist undefined/null
+          jackpotWon: state.jackpotWon,
           sessionStats: state.sessionStats,
           sessionBank: toFixed3(state.sessionBank),
           recentWinners: state.recentWinners,
@@ -225,15 +229,17 @@ export const useGameStore = create<GameState & GameActions>()(
         return partialState
       },
       onRehydrateStorage: () => (state) => {
-        console.log('Rehydrated state:', { 
-          jackpotAmount: state?.jackpotAmount,
-          lastJackpotContribution: state?.lastJackpotContribution,
-          recentWinners: state?.recentWinners,
-          currentStreak: state?.currentStreak,
-          currentBank: state?.currentBank,
-          gameStarted: state?.gameStarted,
-          previousRolls: state?.previousRolls
-        })
+        if (state) {
+          console.log('Rehydrated state:', { 
+            jackpotAmount: state.jackpotAmount || 0, // Ensure we never rehydrate undefined/null
+            lastJackpotContribution: state.lastJackpotContribution,
+            recentWinners: state.recentWinners,
+            currentStreak: state.currentStreak,
+            currentBank: state.currentBank,
+            gameStarted: state.gameStarted,
+            previousRolls: state.previousRolls
+          })
+        }
       }
     }
   )
@@ -251,6 +257,7 @@ export type UseGameStateReturn = GameState & {
   handleWithdraw: (amount: number) => boolean
   simulateMegaBonus: () => void
   simulateMiniBonusBonus: () => void
+  setJackpotWon: (won: boolean) => void
 }
 
 export function useGameState(userId?: string): UseGameStateReturn {
@@ -279,7 +286,23 @@ export function useGameState(userId?: string): UseGameStateReturn {
           
           // Subscribe to real-time updates
           unsubscribe = await subscribeToGameState(userId, (newState) => {
-            if (newState.jackpotAmount !== undefined) state.setJackpotAmount(newState.jackpotAmount)
+            console.log('Received game state update:', {
+              currentJackpot: state.jackpotAmount,
+              newJackpot: newState.jackpotAmount,
+              currentJackpotWon: state.jackpotWon,
+              newJackpotWon: newState.jackpotWon,
+              timestamp: new Date().toISOString()
+            })
+            
+            // Handle jackpot updates first
+            if (newState.jackpotAmount !== undefined) {
+              state.setJackpotAmount(newState.jackpotAmount)
+            }
+            if (newState.jackpotWon !== undefined) {
+              state.setJackpotWon(newState.jackpotWon)
+            }
+            
+            // Update other state properties
             if (newState.sessionStats) state.setSessionStats(newState.sessionStats)
             if (newState.sessionBank !== undefined) state.setSessionBank(newState.sessionBank)
             if (newState.currentStreak !== undefined) state.setCurrentStreak(newState.currentStreak)
@@ -320,7 +343,8 @@ export function useGameState(userId?: string): UseGameStateReturn {
           gameStarted: state.gameStarted,
           previousRolls: state.previousRolls,
           bonusType: state.bonusType,
-          bonusRolls: state.bonusRolls
+          bonusRolls: state.bonusRolls,
+          jackpotWon: state.jackpotWon
         }, userId)
       } catch (error) {
         console.error('Error saving game state:', error)
@@ -354,6 +378,18 @@ export function useGameState(userId?: string): UseGameStateReturn {
     const initialBank = GAME_CONFIG.ROLL_COST
     const newSessionBank = state.sessionBank - initialBank
 
+    // Reset jackpot won state in database
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+    const { error: resetError } = await supabase
+      .rpc('reset_jackpot_won')
+    
+    if (resetError) {
+      console.error('Error resetting jackpot won state:', resetError)
+    }
+
     // Set initial state synchronously to ensure correct values
     state.setCurrentBank(initialBank)
     state.setSessionBank(newSessionBank)
@@ -365,12 +401,24 @@ export function useGameState(userId?: string): UseGameStateReturn {
     state.setShowBust(false)
     state.setGameStarted(true)
     state.setRolling(true)
+    state.setJackpotWon(false) // Reset jackpot won flag when starting new game
+    
+    // Load fresh jackpot value from server
+    try {
+      const freshState = await loadGameState(userId)
+      if (freshState?.jackpotAmount !== undefined) {
+        state.setJackpotAmount(freshState.jackpotAmount)
+      }
+    } catch (error) {
+      console.error('Error loading fresh jackpot value:', error)
+    }
     
     console.log('Game state after reset:', {
       gameStarted: true,
       sessionBank: newSessionBank,
       currentBank: initialBank,
-      currentStreak: 0
+      currentStreak: 0,
+      jackpotWon: false
     })
     
     state.setSessionStats({
@@ -411,6 +459,21 @@ export function useGameState(userId?: string): UseGameStateReturn {
     }
 
     try {
+      // Reset jackpot won state if needed before rolling
+      if (state.jackpotWon) {
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+        const { error: resetError } = await supabase.rpc('reset_jackpot_won')
+        if (resetError) {
+          console.error('Error resetting jackpot won state:', resetError)
+        } else {
+          state.setJackpotWon(false)
+          console.log('Reset jackpot won state before new roll')
+        }
+      }
+
       // Get current state values
       const currentState = {
         currentBank: state.currentBank || GAME_CONFIG.ROLL_COST, // Ensure we have a valid bank amount
@@ -437,7 +500,9 @@ export function useGameState(userId?: string): UseGameStateReturn {
         isBust: result.isBust,
         newStreak: result.newStreak,
         currentBank: currentState.currentBank,
-        sentBank: currentState.currentBank
+        sentBank: currentState.currentBank,
+        newJackpot: result.newJackpot,
+        jackpotWon: state.jackpotWon
       })
 
       // Update game state with roll result
@@ -469,8 +534,24 @@ export function useGameState(userId?: string): UseGameStateReturn {
         state.setPreviousRolls([...currentState.previousRolls, result.roll])
       }
 
-      // Update jackpot
-      state.setJackpotAmount(result.newJackpot)
+      // Always update jackpot if there's a new value
+      if (result.newJackpot !== undefined) {
+        console.log('Updating jackpot:', {
+          oldJackpot: state.jackpotAmount,
+          newJackpot: result.newJackpot,
+          jackpotWon: state.jackpotWon,
+          serverJackpotWon: result.jackpotWon,
+          contribution: result.newJackpot - state.jackpotAmount
+        })
+        
+        // Always update jackpot amount
+        state.setJackpotAmount(result.newJackpot)
+        
+        // Sync won state with server
+        if (result.jackpotWon !== state.jackpotWon) {
+          state.setJackpotWon(result.jackpotWon)
+        }
+      }
 
       // Handle bonus rounds
       if (result.bonusType) {
@@ -484,7 +565,9 @@ export function useGameState(userId?: string): UseGameStateReturn {
         currentStreak: state.currentStreak,
         previousRolls: state.previousRolls,
         isRolling: state.isRolling,
-        sentBank: currentState.currentBank
+        sentBank: currentState.currentBank,
+        jackpotAmount: state.jackpotAmount,
+        jackpotWon: state.jackpotWon
       })
 
     } catch (error) {
@@ -539,6 +622,8 @@ export function useGameState(userId?: string): UseGameStateReturn {
     state.setCurrentStreak(0)
     state.setPreviousRolls([])  // Reset dice history
     state.setCurrentRoll([])    // Also reset current roll
+    
+    // Don't reset jackpotWon here - it should persist until a new game starts
     
     toast({
       title: 'Cashed Out!',
@@ -609,6 +694,7 @@ export function useGameState(userId?: string): UseGameStateReturn {
     handleDeposit,
     handleWithdraw,
     simulateMegaBonus,
-    simulateMiniBonusBonus
+    simulateMiniBonusBonus,
+    setJackpotWon: state.setJackpotWon
   }
 }
