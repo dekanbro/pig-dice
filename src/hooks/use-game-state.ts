@@ -3,8 +3,22 @@ import { persist } from 'zustand/middleware'
 import { toast } from '@/components/ui/use-toast'
 import { STANDARD_MULTIPLIERS, GAME_CONFIG } from '@/lib/constants'
 import { saveGameState, loadGameState, subscribeToGameState, handleGameRoll } from '@/lib/game-service'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
+
+// Define RollResult type
+interface RollResult {
+  roll: number
+  payout: number
+  multiplier: number
+  isBust: boolean
+  newStreak: number
+  newJackpot?: number
+  jackpotWon: boolean
+  bonusType: 'MEGA_BONUS' | 'MINI_BONUS' | null
+  bonusRolls: number[] | null
+  jackpotContribution: number
+}
 
 // Convert number to fixed precision (3 decimals) to avoid floating point issues
 function toFixed3(num: number | undefined | null): number {
@@ -264,6 +278,11 @@ export function useGameState(userId?: string): UseGameStateReturn {
   const state = useGameStore()
   
   // Load initial state and subscribe to updates
+  // Note: We intentionally omit 'state' from the dependencies to prevent an infinite loop.
+  // The subscription callback maintains closure access to the latest state without needing
+  // to re-subscribe when state changes. Including 'state' would cause unnecessary 
+  // re-subscriptions and potential race conditions with Supabase real-time updates.
+
   useEffect(() => {
     if (!userId) return
 
@@ -326,7 +345,8 @@ export function useGameState(userId?: string): UseGameStateReturn {
         unsubscribe()
       }
     }
-  }, [userId, state])
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [userId])
 
   // Save state to Supabase whenever it changes
   useEffect(() => {
@@ -367,6 +387,9 @@ export function useGameState(userId?: string): UseGameStateReturn {
     state.bonusRolls,
     state.jackpotWon
   ])
+
+  // Add new ref to store roll result
+  const rollResultRef = useRef<RollResult | null>(null)
 
   async function handleStartGame() {
     if (!userId || state.sessionBank < GAME_CONFIG.ROLL_COST) return
@@ -426,9 +449,6 @@ export function useGameState(userId?: string): UseGameStateReturn {
     state.setSessionStats({
       totalGames: state.sessionStats.totalGames + 1
     })
-
-    // Wait a moment for state to settle before first roll
-    await new Promise(resolve => setTimeout(resolve, 100))
 
     // Get current state before rolling
     const currentState = {
@@ -507,36 +527,13 @@ export function useGameState(userId?: string): UseGameStateReturn {
         jackpotWon: state.jackpotWon
       })
 
-      // Update game state with roll result
+      // Store result to be applied after animation
+      rollResultRef.current = result
+
+      // Only set the current roll - other state changes wait for animation
       state.setCurrentRoll([result.roll])
-      state.setCurrentStreak(result.newStreak)
 
-      // Handle different roll outcomes
-      if (result.isBust) {
-        console.log('Handling bust:', {
-          currentBank: currentState.currentBank,
-          newBank: 0
-        })
-        // Handle bust
-        state.setCurrentBank(0)
-        state.setShowBust(true)
-        state.setGameStarted(false)
-        state.setPreviousRolls([])  // Reset dice history on bust
-        state.setCurrentRoll([])    // Also reset current roll
-      } else {
-        // Handle all non-bust cases
-        console.log('Setting new bank amount:', {
-          currentBank: currentState.currentBank,
-          newBank: result.payout,
-          roll: result.roll,
-          multiplier: result.multiplier,
-          streak: currentState.currentStreak
-        })
-        state.setCurrentBank(result.payout)  // Use the payout from the server
-        state.setPreviousRolls([...currentState.previousRolls, result.roll])
-      }
-
-      // Always update jackpot if there's a new value
+      // Update jackpot amount immediately since it's not tied to animation
       if (result.newJackpot !== undefined) {
         console.log('Updating jackpot:', {
           oldJackpot: state.jackpotAmount,
@@ -546,31 +543,12 @@ export function useGameState(userId?: string): UseGameStateReturn {
           contribution: result.newJackpot - state.jackpotAmount
         })
         
-        // Always update jackpot amount
         state.setJackpotAmount(result.newJackpot)
         
-        // Sync won state with server
         if (result.jackpotWon !== state.jackpotWon) {
           state.setJackpotWon(result.jackpotWon)
         }
       }
-
-      // Handle bonus rounds
-      if (result.bonusType) {
-        state.setBonusType(result.bonusType)
-        state.setBonusRolls(result.bonusRolls || [])
-      }
-
-      console.log('End of handleRoll:', {
-        currentBank: state.currentBank,
-        sessionBank: state.sessionBank,
-        currentStreak: state.currentStreak,
-        previousRolls: state.previousRolls,
-        isRolling: state.isRolling,
-        sentBank: currentState.currentBank,
-        jackpotAmount: state.jackpotAmount,
-        jackpotWon: state.jackpotWon
-      })
 
     } catch (error) {
       console.error('Roll error:', error)
@@ -581,8 +559,8 @@ export function useGameState(userId?: string): UseGameStateReturn {
         description: error instanceof Error ? error.message : "Failed to process roll. Please try again.",
         variant: "destructive"
       })
-    } finally {
       state.setRolling(false)
+      rollResultRef.current = null
     }
   }
 
@@ -659,6 +637,44 @@ export function useGameState(userId?: string): UseGameStateReturn {
   function handleRollComplete() {
     console.log('handleRollComplete', { currentRoll: state.currentRoll })
     state.setRolling(false)
+    
+    // Apply stored roll result after animation completes
+    const result = rollResultRef.current
+    if (result) {
+      console.log('Applying roll result after animation:', result)
+      
+      if (result.isBust) {
+        console.log('Handling bust:', {
+          currentBank: state.currentBank,
+          newBank: 0
+        })
+        state.setCurrentBank(0)
+        state.setGameStarted(false)
+        state.setPreviousRolls([])
+        state.setShowBust(true)
+      } else {
+        console.log('Setting new bank amount:', {
+          currentBank: state.currentBank,
+          newBank: result.payout,
+          roll: result.roll,
+          multiplier: result.multiplier,
+          streak: state.currentStreak
+        })
+        state.setCurrentBank(result.payout)
+        state.setPreviousRolls([...state.previousRolls, result.roll])
+      }
+
+      state.setCurrentStreak(result.newStreak)
+
+      // Handle bonus rounds
+      if (result.bonusType) {
+        state.setBonusType(result.bonusType)
+        state.setBonusRolls(result.bonusRolls || [])
+      }
+
+      // Clear stored result
+      rollResultRef.current = null
+    }
   }
 
   function handleBonusDismiss() {
@@ -668,6 +684,7 @@ export function useGameState(userId?: string): UseGameStateReturn {
 
   function handleBustDismiss() {
     state.setShowBust(false)
+    state.setCurrentRoll([]) // Only reset current roll after bust animation is dismissed
   }
 
   function simulateMegaBonus() {

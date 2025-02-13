@@ -15,6 +15,13 @@ import { useEffect, useState } from 'react'
 import { toast } from '@/components/ui/use-toast'
 import { getRollDescription, getRollVariant } from '@/hooks/use-game-state'
 import { GAME_CONFIG } from '@/lib/constants'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { CashOutEffect } from './animations/cash-out'
 
 type GameBoardProps = UseGameStateReturn & {
   onTriggerJackpot?: () => void
@@ -52,6 +59,8 @@ export function GameBoard({
   const { user } = usePrivy()
   const [showJackpot, setShowJackpot] = useState(false)
   const [jackpotWinAmount, setJackpotWinAmount] = useState(0)
+  const [showCashOut, setShowCashOut] = useState(false)
+  const [cashOutAmount, setCashOutAmount] = useState(0)
 
   // Add effect to auto-roll when game starts
   useEffect(() => {
@@ -88,7 +97,7 @@ export function GameBoard({
     handleDeposit(1)
   }
 
-  // Handle cashout with toast
+  // Handle cashout with animation
   const onCashout = () => {
     if (currentBank <= 0) {
       toast({
@@ -99,30 +108,39 @@ export function GameBoard({
       return
     }
 
+    setCashOutAmount(currentBank)
+    setShowCashOut(true)
+  }
+
+  const handleCashOutDismiss = () => {
+    setShowCashOut(false)
     handleCashout()
     toast({
       title: "Cashed Out!",
-      description: `Successfully cashed out ${currentBank.toFixed(3)} PIG!`,
+      description: `Successfully cashed out ${cashOutAmount.toFixed(3)} PIG!`,
     })
   }
 
   // Handle roll complete with toast for special outcomes
   const onRollComplete = () => {
-    console.log('GameBoard onRollComplete called', { currentRoll, isRolling })
-    
-    handleRollComplete()
-    
-    const roll = currentRoll[0]
-    console.log('Current roll value:', roll)
-    
-    if (roll) {
-      console.log('Showing toast for roll:', roll)
-      toast({
-        title: "Roll Complete",
-        description: getRollDescription(roll, (currentStreak - 1) * GAME_CONFIG.STREAK_BONUS_PER_LEVEL),
-        variant: getRollVariant(roll)
-      })
-    }
+    // Wait for any animations to complete before showing result
+    requestAnimationFrame(() => {
+      console.log('GameBoard onRollComplete called', { currentRoll, isRolling })
+      
+      handleRollComplete()
+      
+      const roll = currentRoll[0]
+      console.log('Current roll value:', roll)
+      
+      if (roll) {
+        console.log('Showing toast for roll:', roll)
+        toast({
+          title: "Roll Complete",
+          description: getRollDescription(roll, (currentStreak - 1) * GAME_CONFIG.STREAK_BONUS_PER_LEVEL),
+          variant: getRollVariant(roll)
+        })
+      }
+    })
   }
 
   // Handle jackpot win
@@ -226,15 +244,16 @@ export function GameBoard({
         </div>
 
         {/* Previous Rolls */}
-        <AnimatePresence>
-          {!isRolling && !bonusType && !showBust && previousRolls.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="flex gap-2 overflow-x-auto p-2 w-full max-w-xs"
-            >
-              {previousRolls.map((roll, index) => (
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={previousRolls.length > 0 ? 'history' : 'placeholder'}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="h-12 flex items-center gap-2 overflow-x-auto p-2 w-full max-w-xs"
+          >
+            {previousRolls.length > 0 ? (
+              previousRolls.map((roll, index) => (
                 <motion.div
                   key={index}
                   initial={{ scale: 0 }}
@@ -247,9 +266,31 @@ export function GameBoard({
                 >
                   {roll}
                 </motion.div>
-              ))}
-            </motion.div>
-          )}
+              ))
+            ) : (
+              <div className="flex gap-2">
+                {[1, 2, 3].map((i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0 }}
+                    animate={{ 
+                      opacity: [0, 0.3, 0.1],
+                      scale: [1, 1.05, 1]
+                    }}
+                    transition={{ 
+                      duration: 2,
+                      delay: i * 0.2,
+                      repeat: Infinity,
+                      repeatType: "reverse"
+                    }}
+                    className="w-8 h-8 flex items-center justify-center rounded-full border border-muted-foreground/80 bg-muted/10"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-muted-foreground/20" />
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </motion.div>
         </AnimatePresence>
 
         {/* Debug Panel */}
@@ -279,16 +320,42 @@ export function GameBoard({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Add Cash Out Animation */}
+        <AnimatePresence>
+          {showCashOut && !isRolling && (
+            <CashOutEffect
+              amount={cashOutAmount}
+              onDismiss={handleCashOutDismiss}
+            />
+          )}
+        </AnimatePresence>
       </CardContent>
       <CardFooter className="flex justify-center gap-4">
         {!gameStarted ? (
-          <Button
-            size="lg"
-            onClick={onStartGame}
-            disabled={isRolling || !user?.id || sessionBank < GAME_CONFIG.ROLL_COST}
-          >
-            Start Game ({GAME_CONFIG.ROLL_COST} PIG)
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <Button
+                    size="lg"
+                    onClick={onStartGame}
+                    disabled={isRolling || !user?.id || sessionBank < GAME_CONFIG.ROLL_COST}
+                    className={sessionBank < GAME_CONFIG.ROLL_COST ? "bg-destructive/80 hover:bg-destructive/80 text-destructive-foreground border-destructive-foreground/50" : ""}
+                  >
+                    Start Game ({GAME_CONFIG.ROLL_COST} PIG)
+                  </Button>
+                </div>
+              </TooltipTrigger>
+              {sessionBank < GAME_CONFIG.ROLL_COST && (
+                <TooltipContent>
+                  <p>Insufficient PIG in session bank</p>
+                  <p className="text-xs text-muted-foreground">Need: {GAME_CONFIG.ROLL_COST} PIG</p>
+                  <p className="text-xs text-muted-foreground">Have: {sessionBank.toFixed(3)} PIG</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
         ) : (
           <>
             <Button
@@ -299,13 +366,29 @@ export function GameBoard({
             >
               Cash Out
             </Button>
-            <Button
-              size="lg"
-              onClick={() => handleRoll()}
-              disabled={isRolling || !user?.id || sessionBank < GAME_CONFIG.ROLL_COST}
-            >
-              {isRolling ? 'Rolling...' : `Roll Again (${GAME_CONFIG.ROLL_COST} PIG)`}
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <Button
+                      size="lg"
+                      onClick={() => handleRoll()}
+                      disabled={isRolling || !user?.id || sessionBank < GAME_CONFIG.ROLL_COST}
+                      className={sessionBank < GAME_CONFIG.ROLL_COST ? "bg-destructive/80 hover:bg-destructive/80 text-destructive-foreground border-destructive-foreground/50" : ""}
+                    >
+                      {isRolling ? 'Rolling...' : `Roll Again (${GAME_CONFIG.ROLL_COST} PIG)`}
+                    </Button>
+                  </div>
+                </TooltipTrigger>
+                {sessionBank < GAME_CONFIG.ROLL_COST && (
+                  <TooltipContent>
+                    <p>Insufficient PIG in session bank</p>
+                    <p className="text-xs text-muted-foreground">Need: {GAME_CONFIG.ROLL_COST} PIG</p>
+                    <p className="text-xs text-muted-foreground">Have: {sessionBank.toFixed(3)} PIG</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
           </>
         )}
       </CardFooter>
