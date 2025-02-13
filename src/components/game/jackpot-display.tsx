@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { motion, AnimatePresence } from 'framer-motion'
+import { JackpotRulesDialog } from './jackpot-rules-dialog'
 
 interface JackpotDisplayProps {
   jackpot: {
@@ -16,9 +17,12 @@ interface JackpotDisplayProps {
 
 export function JackpotDisplay({ jackpot }: JackpotDisplayProps) {
   return (
-    <Card>
+    <Card className="relative">
       <CardHeader>
-        <CardTitle className="text-center">Jackpot</CardTitle>
+        <div className="flex items-center justify-center gap-2">
+          <CardTitle>Jackpot</CardTitle>
+          <JackpotRulesDialog />
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         <AnimatePresence mode="wait">
